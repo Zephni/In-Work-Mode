@@ -12,7 +12,10 @@ if not exist "%CSC%" (
     exit /b 1
 )
 
-"%CSC%" /nologo /target:winexe /optimize+ /out:FakeActiveUser.exe ^
+set "ICON="
+if exist "app.ico" set "ICON=/win32icon:app.ico"
+
+"%CSC%" /nologo /target:winexe /optimize+ /out:FakeActiveUser.exe %ICON% ^
     /reference:System.Windows.Forms.dll ^
     /reference:System.Drawing.dll ^
     FakeActiveUser.cs

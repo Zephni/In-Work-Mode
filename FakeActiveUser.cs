@@ -62,6 +62,7 @@ namespace FakeActiveUser
         static extern IntPtr GetModuleHandle(string lpModuleName);
 
         Timer _timer;
+        NotifyIcon _tray;
 
         public OverlayForm()
         {
@@ -73,6 +74,19 @@ namespace FakeActiveUser
             BackColor = Color.FromArgb(20, 20, 20);
             Opacity = 0.82;              // slightly see-through so nothing is fully hidden
             AutoSize = false;
+
+            // App icon (used for the window and the tray).
+            Icon appIcon = LoadAppIcon();
+            if (appIcon != null) this.Icon = appIcon;
+
+            // System-tray icon with a right-click Quit option.
+            _tray = new NotifyIcon();
+            _tray.Icon = appIcon ?? SystemIcons.Application;
+            _tray.Text = "Active User Mode - press ESC to quit";
+            _tray.Visible = true;
+            var menu = new ContextMenuStrip();
+            menu.Items.Add("Quit", null, (s, e) => Application.Exit());
+            _tray.ContextMenuStrip = menu;
 
             // Build the label text.
             var label = new Label();
@@ -160,6 +174,25 @@ namespace FakeActiveUser
             return CallNextHookEx(_hookID, nCode, wParam, lParam);
         }
 
+        // Loads the icon embedded in this exe (falls back to a sibling app.ico).
+        static Icon LoadAppIcon()
+        {
+            try
+            {
+                var ico = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
+                if (ico != null) return ico;
+            }
+            catch { }
+            try
+            {
+                string path = System.IO.Path.Combine(
+                    System.IO.Path.GetDirectoryName(Application.ExecutablePath), "app.ico");
+                if (System.IO.File.Exists(path)) return new Icon(path);
+            }
+            catch { }
+            return null;
+        }
+
         void Cleanup()
         {
             if (_hookID != IntPtr.Zero)
@@ -170,6 +203,12 @@ namespace FakeActiveUser
             // Release the "stay awake" request so normal power settings resume.
             SetThreadExecutionState(ES_CONTINUOUS);
             if (_timer != null) _timer.Stop();
+            if (_tray != null)
+            {
+                _tray.Visible = false;
+                _tray.Dispose();
+                _tray = null;
+            }
         }
     }
 }
