@@ -19,14 +19,15 @@ namespace FakeActiveUser
     {
         // "Taskbar" or "SystemTray". Defaults to Taskbar.
         public string DisplayMode { get; set; }
-        // Name of the key that quits the app (any System.Windows.Forms.Keys value).
+        // Key (or key combination) that quits the app. Supports "+" combinations
+        // using Ctrl/Shift/Alt modifiers, e.g. "Ctrl+Shift+Q". Spaces are ignored.
         // Defaults to "Escape".
-        public string QuitKey { get; set; }
+        public string QuitKeys { get; set; }
 
         public AppConfig()
         {
             DisplayMode = "Taskbar";
-            QuitKey = "Escape";
+            QuitKeys = "Escape";
         }
 
         public DisplayMode DisplayModeValue
@@ -39,14 +40,43 @@ namespace FakeActiveUser
             }
         }
 
-        public Keys QuitKeyValue
+        // Parses QuitKeys into a main key, its required modifiers, and a display
+        // string. Spaces are ignored and tokens are separated by "+".
+        public void ParseQuitKeys(out Keys mainKey, out Keys modifiers, out string display)
         {
-            get
+            mainKey = Keys.None;
+            modifiers = Keys.None;
+
+            string source = string.IsNullOrEmpty(QuitKeys) ? "Escape" : QuitKeys;
+            foreach (string token in source.Split('+'))
             {
-                Keys key;
-                if (!string.IsNullOrEmpty(QuitKey) && Enum.TryParse(QuitKey, true, out key)) return key;
-                return Keys.Escape;
+                string t = token.Trim();
+                if (t.Length == 0) continue;
+
+                if (t.Equals("Ctrl", StringComparison.OrdinalIgnoreCase) ||
+                    t.Equals("Control", StringComparison.OrdinalIgnoreCase))
+                    modifiers |= Keys.Control;
+                else if (t.Equals("Shift", StringComparison.OrdinalIgnoreCase))
+                    modifiers |= Keys.Shift;
+                else if (t.Equals("Alt", StringComparison.OrdinalIgnoreCase))
+                    modifiers |= Keys.Alt;
+                else
+                {
+                    Keys k;
+                    if (Enum.TryParse(t, true, out k)) mainKey = k;
+                }
             }
+
+            // If nothing usable was parsed, fall back to Escape.
+            if (mainKey == Keys.None && modifiers == Keys.None) mainKey = Keys.Escape;
+
+            // Build a friendly display string: modifiers first, then the key.
+            var parts = new System.Collections.Generic.List<string>();
+            if ((modifiers & Keys.Control) != 0) parts.Add("Ctrl");
+            if ((modifiers & Keys.Shift) != 0) parts.Add("Shift");
+            if ((modifiers & Keys.Alt) != 0) parts.Add("Alt");
+            if (mainKey != Keys.None) parts.Add(mainKey.ToString());
+            display = string.Join("+", parts.ToArray());
         }
 
         // Loads config.ini from the exe folder. Missing/invalid config falls
@@ -74,8 +104,9 @@ namespace FakeActiveUser
 
                         if (keyName.Equals("DisplayMode", StringComparison.OrdinalIgnoreCase))
                             cfg.DisplayMode = value;
-                        else if (keyName.Equals("QuitKey", StringComparison.OrdinalIgnoreCase))
-                            cfg.QuitKey = value;
+                        else if (keyName.Equals("QuitKeys", StringComparison.OrdinalIgnoreCase) ||
+                                 keyName.Equals("QuitKey", StringComparison.OrdinalIgnoreCase))
+                            cfg.QuitKeys = value;
                     }
                 }
             }
@@ -122,10 +153,11 @@ namespace FakeActiveUser
         const uint ES_SYSTEM_REQUIRED = 0x00000001;
         const uint ES_DISPLAY_REQUIRED = 0x00000002;
 
-        // ---- Global low-level keyboard hook (to catch the quit key anywhere) ----
+        // ---- Global low-level keyboard hook (to catch the quit combo anywhere) ----
         const int WH_KEYBOARD_LL = 13;
         const int WM_KEYDOWN = 0x0100;
         static int _quitVkCode = (int)Keys.Escape;
+        static Keys _quitModifiers = Keys.None;
 
         delegate IntPtr LowLevelKeyboardProc(int nCode, IntPtr wParam, IntPtr lParam);
         static LowLevelKeyboardProc _proc;
@@ -148,10 +180,12 @@ namespace FakeActiveUser
         {
             if (config == null) config = new AppConfig();
 
-            // Apply the configured quit key (used by the global keyboard hook).
-            Keys quitKey = config.QuitKeyValue;
-            _quitVkCode = (int)quitKey;
-            string quitKeyName = quitKey.ToString();
+            // Apply the configured quit key combination (used by the global hook).
+            Keys quitMainKey, quitModifiers;
+            string quitKeyName;
+            config.ParseQuitKeys(out quitMainKey, out quitModifiers, out quitKeyName);
+            _quitVkCode = (int)quitMainKey;
+            _quitModifiers = quitModifiers;
 
             // Decide where the app presents itself.
             _showInTaskbar = config.DisplayModeValue == FakeActiveUser.DisplayMode.Taskbar;
@@ -261,7 +295,7 @@ namespace FakeActiveUser
             if (nCode >= 0 && (int)wParam == WM_KEYDOWN)
             {
                 int vkCode = Marshal.ReadInt32(lParam);
-                if (vkCode == _quitVkCode)
+                if (vkCode == _quitVkCode && Control.ModifierKeys == _quitModifiers)
                 {
                     Application.Exit();
                 }
