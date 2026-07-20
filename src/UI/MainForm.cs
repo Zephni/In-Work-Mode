@@ -29,8 +29,8 @@ namespace WorkMode.UI
             // sit compactly; the app opens at this minimum unless a size is saved.
             MinimumSize = new Size(360, 170);
 
-            int startWidth = _config.WindowWidth > 0 ? _config.WindowWidth : 420;
-            int startHeight = _config.WindowHeight > 0 ? _config.WindowHeight : MinimumSize.Height;
+            int startWidth = _config.WindowWidth > 0 ? _config.WindowWidth : 440;
+            int startHeight = _config.WindowHeight > 0 ? _config.WindowHeight : 260;
             Size = new Size(startWidth, startHeight);
 
             Theme.ApplyForm(this);

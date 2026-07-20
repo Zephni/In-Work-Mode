@@ -37,14 +37,15 @@ namespace WorkMode.UI
                 Text = title ?? string.Empty,
                 BorderStyle = BorderStyle.None,
                 BackColor = Theme.SurfaceAlt,
-                ForeColor = Theme.Text
+                ForeColor = Theme.Text,
+                Font = new Font("Segoe UI", 11f, FontStyle.Regular)
             };
-            var titlePanel = CreateInputPanel(_titleBox, new Point(12, 34), 296);
+            var titlePanel = CreateInputPanel(_titleBox, new Point(12, titleLabel.Bottom + 4), 296);
 
             var timeLabel = new Label
             {
                 Text = "Time counted (HH:MM:SS)",
-                Location = new Point(12, 66),
+                Location = new Point(12, titlePanel.Bottom + 18),
                 AutoSize = true,
                 ForeColor = Theme.TextMuted
             };
@@ -54,15 +55,16 @@ namespace WorkMode.UI
                 BorderStyle = BorderStyle.None,
                 BackColor = Theme.SurfaceAlt,
                 ForeColor = Theme.Text,
-                Font = new Font("Consolas", 9f, FontStyle.Regular)
+                Font = new Font("Consolas", 11f, FontStyle.Regular)
             };
-            var timePanel = CreateInputPanel(_timeBox, new Point(12, 85), 296);
+            var timePanel = CreateInputPanel(_timeBox, new Point(12, timeLabel.Bottom + 4), 296);
 
+            int buttonTop = timePanel.Bottom + 18;
             var okButton = new Button
             {
                 Text = "OK",
                 DialogResult = DialogResult.OK,
-                Location = new Point(152, 120),
+                Location = new Point(152, buttonTop),
                 Size = new Size(75, 30)
             };
             Theme.StyleButton(okButton, Theme.Accent, Theme.AccentHover, Color.White);
@@ -72,10 +74,12 @@ namespace WorkMode.UI
             {
                 Text = "Cancel",
                 DialogResult = DialogResult.Cancel,
-                Location = new Point(233, 120),
+                Location = new Point(233, buttonTop),
                 Size = new Size(75, 30)
             };
             Theme.StyleSurfaceButton(cancelButton);
+
+            ClientSize = new Size(320, buttonTop + 30 + 15);
 
             Controls.Add(titleLabel);
             Controls.Add(titlePanel);
