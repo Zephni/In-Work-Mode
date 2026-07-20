@@ -94,6 +94,40 @@ namespace WorkMode.UI
             return bmp;
         }
 
+        public static Bitmap Reset(int size, Color color)
+        {
+            Graphics g;
+            var bmp = NewBitmap(size, out g);
+            using (var pen = new Pen(color, size * 0.11f) { StartCap = LineCap.Round, EndCap = LineCap.Round })
+            {
+                float m = size * 0.24f;
+                var rect = new RectangleF(m, m, size - 2 * m, size - 2 * m);
+                // Almost-full circular arrow with a gap at the top-right.
+                g.DrawArc(pen, rect, -30f, 300f);
+
+                // Arrowhead at the open end of the arc (top-right).
+                float cx = size / 2f, cy = size / 2f;
+                float r = rect.Width / 2f;
+                double a = -30.0 * System.Math.PI / 180.0;
+                float ex = cx + r * (float)System.Math.Cos(a);
+                float ey = cy + r * (float)System.Math.Sin(a);
+                float h = size * 0.20f;
+                using (var head = new GraphicsPath())
+                {
+                    head.AddPolygon(new[]
+                    {
+                        new PointF(ex, ey),
+                        new PointF(ex - h, ey - h * 0.15f),
+                        new PointF(ex + h * 0.15f, ey + h)
+                    });
+                    using (var brush = new SolidBrush(color))
+                        g.FillPath(brush, head);
+                }
+            }
+            g.Dispose();
+            return bmp;
+        }
+
         public static Bitmap Trash(int size, Color color)
         {
             Graphics g;

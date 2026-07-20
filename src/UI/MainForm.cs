@@ -130,6 +130,7 @@ namespace WorkMode.UI
         {
             var row = new WorkspaceControl(ws);
             row.ToggleRequested += OnToggle;
+            row.ResetRequested += OnReset;
             row.EditRequested += OnEdit;
             row.SelectRequested += OnRowSelected;
             _list.Controls.Add(row);
@@ -217,6 +218,22 @@ namespace WorkMode.UI
 
             row.Refresh();
             UpdateActivityState();
+            _config.Save();
+        }
+
+        private void OnReset(object sender, EventArgs e)
+        {
+            var row = (WorkspaceControl)sender;
+            Workspace ws = row.Workspace;
+
+            var result = MessageBox.Show(this,
+                string.Format("Reset the timer for \"{0}\" to 00:00:00?", ws.Title),
+                "Reset Timer", MessageBoxButtons.YesNo, MessageBoxIcon.Question,
+                MessageBoxDefaultButton.Button2);
+            if (result != DialogResult.Yes) return;
+
+            ws.Reset();
+            row.Refresh();
             _config.Save();
         }
 

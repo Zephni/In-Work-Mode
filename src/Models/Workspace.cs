@@ -40,6 +40,15 @@ namespace WorkMode.Models
             IsRunning = false;
         }
 
+        // Clears the counted time back to zero. If the timer is currently running
+        // it keeps running, but counts up again from zero.
+        public void Reset()
+        {
+            ElapsedSeconds = 0;
+            _baseSeconds = 0;
+            if (IsRunning) _stopwatch = Stopwatch.StartNew();
+        }
+
         // Refreshes ElapsedSeconds from the running stopwatch. No-op when stopped.
         public void Sync()
         {

@@ -23,6 +23,11 @@ namespace WorkMode.UI
         public static readonly Color Danger = Color.FromArgb(224, 90, 90);
         public static readonly Color DangerHover = Color.FromArgb(238, 112, 112);
 
+        // Muted amber used for the low-key "reset" action. Deliberately desaturated
+        // so it reads as secondary next to the teal Start and the red Stop.
+        public static readonly Color Muted = Color.FromArgb(122, 104, 66);
+        public static readonly Color MutedHover = Color.FromArgb(150, 128, 82);
+
         // Text.
         public static readonly Color Text = Color.FromArgb(233, 236, 239);
         public static readonly Color TextMuted = Color.FromArgb(150, 158, 168);

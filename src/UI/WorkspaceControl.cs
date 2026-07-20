@@ -16,12 +16,16 @@ namespace WorkMode.UI
         private readonly Label _titleLabel;
         private readonly Label _timeLabel;
         private readonly Button _toggleButton;
+        private readonly Button _resetButton;
         private readonly Button _editButton;
+        private readonly ToolTip _tooltip;
         private bool _selected;
         private bool _hover;
 
         // Raised when the user toggles this workspace's timer on or off.
         public event EventHandler ToggleRequested;
+        // Raised when the user asks to reset this workspace's counted time.
+        public event EventHandler ResetRequested;
         // Raised when the user asks to edit this workspace.
         public event EventHandler EditRequested;
         // Raised when the user clicks the row to select it.
@@ -75,32 +79,40 @@ namespace WorkMode.UI
 
             _toggleButton = new Button
             {
-                Size = new Size(78, 30),
+                Size = new Size(34, 30),
                 Anchor = AnchorStyles.Top | AnchorStyles.Right,
-                TextImageRelation = TextImageRelation.ImageBeforeText,
-                ImageAlign = ContentAlignment.MiddleLeft,
-                TextAlign = ContentAlignment.MiddleCenter,
-                Padding = new Padding(4, 0, 0, 0)
+                ImageAlign = ContentAlignment.MiddleCenter
             };
             _toggleButton.Click += (s, e) => { var h = ToggleRequested; if (h != null) h(this, EventArgs.Empty); };
 
+            _resetButton = new Button
+            {
+                Size = new Size(34, 30),
+                Anchor = AnchorStyles.Top | AnchorStyles.Right,
+                Image = Glyphs.Reset(20, Color.White),
+                ImageAlign = ContentAlignment.MiddleCenter
+            };
+            Theme.StyleButton(_resetButton, Theme.Muted, Theme.MutedHover, Color.White);
+            _resetButton.Click += (s, e) => { var h = ResetRequested; if (h != null) h(this, EventArgs.Empty); };
+
             _editButton = new Button
             {
-                Text = "Edit",
-                Size = new Size(78, 30),
+                Size = new Size(34, 30),
                 Anchor = AnchorStyles.Top | AnchorStyles.Right,
                 Image = Glyphs.Edit(20, Theme.Text),
-                TextImageRelation = TextImageRelation.ImageBeforeText,
-                ImageAlign = ContentAlignment.MiddleLeft,
-                TextAlign = ContentAlignment.MiddleCenter,
-                Padding = new Padding(4, 0, 0, 0)
+                ImageAlign = ContentAlignment.MiddleCenter
             };
             Theme.StyleSurfaceButton(_editButton);
             _editButton.Click += (s, e) => { var h = EditRequested; if (h != null) h(this, EventArgs.Empty); };
 
+            _tooltip = new ToolTip { InitialDelay = 350, ReshowDelay = 200, ShowAlways = true };
+            _tooltip.SetToolTip(_resetButton, "Reset");
+            _tooltip.SetToolTip(_editButton, "Edit");
+
             Controls.Add(_titleLabel);
             Controls.Add(_timeLabel);
             Controls.Add(_toggleButton);
+            Controls.Add(_resetButton);
             Controls.Add(_editButton);
 
             // Clicking the card body (anywhere that isn't a button) selects the row.
@@ -180,7 +192,8 @@ namespace WorkMode.UI
         {
             int buttonTop = (Height - _editButton.Height) / 2;
             _editButton.Location = new Point(Width - _editButton.Width - 10, buttonTop);
-            _toggleButton.Location = new Point(_editButton.Left - _toggleButton.Width - 8, buttonTop);
+            _resetButton.Location = new Point(_editButton.Left - _resetButton.Width - 8, buttonTop);
+            _toggleButton.Location = new Point(_resetButton.Left - _toggleButton.Width - 8, buttonTop);
 
             int labelWidth = _toggleButton.Left - 22;
             if (labelWidth < 40) labelWidth = 40;
@@ -196,18 +209,24 @@ namespace WorkMode.UI
 
             if (_workspace.IsRunning)
             {
-                _toggleButton.Text = "Stop";
                 _toggleButton.Image = Glyphs.Stop(20, Color.White);
                 Theme.StyleButton(_toggleButton, Theme.Danger, Theme.DangerHover, Color.White);
+                _tooltip.SetToolTip(_toggleButton, "Stop");
             }
             else
             {
-                _toggleButton.Text = "Start";
                 _toggleButton.Image = Glyphs.Play(20, Color.White);
                 Theme.StyleButton(_toggleButton, Theme.Accent, Theme.AccentHover, Color.White);
+                _tooltip.SetToolTip(_toggleButton, "Start");
             }
 
             base.Refresh();
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing && _tooltip != null) _tooltip.Dispose();
+            base.Dispose(disposing);
         }
     }
 }
