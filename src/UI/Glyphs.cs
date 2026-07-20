@@ -1,0 +1,94 @@
+using System.Drawing;
+using System.Drawing.Drawing2D;
+
+namespace WorkMode.UI
+{
+    // Draws small, crisp vector glyphs used on buttons (play / stop / edit / add).
+    // Everything is rendered with GDI+ so the app needs no external icon assets.
+    internal static class Glyphs
+    {
+        public static Bitmap Play(int size, Color color)
+        {
+            Graphics g;
+            var bmp = NewBitmap(size, out g);
+            float m = size * 0.28f;
+            using (var brush = new SolidBrush(color))
+            {
+                var pts = new[]
+                {
+                    new PointF(m, m),
+                    new PointF(m, size - m),
+                    new PointF(size - m, size / 2f)
+                };
+                g.FillPolygon(brush, pts);
+            }
+            g.Dispose();
+            return bmp;
+        }
+
+        public static Bitmap Stop(int size, Color color)
+        {
+            Graphics g;
+            var bmp = NewBitmap(size, out g);
+            float m = size * 0.30f;
+            using (var brush = new SolidBrush(color))
+            using (var path = RoundedRect(new RectangleF(m, m, size - 2 * m, size - 2 * m), size * 0.06f))
+                g.FillPath(brush, path);
+            g.Dispose();
+            return bmp;
+        }
+
+        public static Bitmap Edit(int size, Color color)
+        {
+            Graphics g;
+            var bmp = NewBitmap(size, out g);
+            using (var pen = new Pen(color, size * 0.10f) { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round })
+            {
+                float lo = size * 0.26f;
+                float hi = size * 0.74f;
+                // Pencil body (diagonal stroke).
+                g.DrawLine(pen, lo, hi, hi, lo);
+                // Pencil tip base.
+                g.DrawLine(pen, lo, hi, lo + size * 0.06f, hi - size * 0.14f);
+            }
+            g.Dispose();
+            return bmp;
+        }
+
+        public static Bitmap Plus(int size, Color color)
+        {
+            Graphics g;
+            var bmp = NewBitmap(size, out g);
+            using (var pen = new Pen(color, size * 0.12f) { StartCap = LineCap.Round, EndCap = LineCap.Round })
+            {
+                float m = size * 0.26f;
+                float c = size / 2f;
+                g.DrawLine(pen, m, c, size - m, c);
+                g.DrawLine(pen, c, m, c, size - m);
+            }
+            g.Dispose();
+            return bmp;
+        }
+
+        private static Bitmap NewBitmap(int size, out Graphics g)
+        {
+            var bmp = new Bitmap(size, size);
+            g = Graphics.FromImage(bmp);
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            g.Clear(Color.Transparent);
+            return bmp;
+        }
+
+        private static GraphicsPath RoundedRect(RectangleF r, float radius)
+        {
+            float d = radius * 2f;
+            var path = new GraphicsPath();
+            path.AddArc(r.X, r.Y, d, d, 180, 90);
+            path.AddArc(r.Right - d, r.Y, d, d, 270, 90);
+            path.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
+            path.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
+            path.CloseFigure();
+            return path;
+        }
+    }
+}

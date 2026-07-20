@@ -22,60 +22,99 @@ namespace WorkMode.UI
             StartPosition = FormStartPosition.CenterParent;
             MaximizeBox = false;
             MinimizeBox = false;
-            ClientSize = new Size(320, 150);
+            ClientSize = new Size(320, 160);
+            Theme.ApplyForm(this);
 
             var titleLabel = new Label
             {
                 Text = "Title",
                 Location = new Point(12, 15),
-                AutoSize = true
+                AutoSize = true,
+                ForeColor = Theme.TextMuted
             };
             _titleBox = new TextBox
             {
                 Text = title ?? string.Empty,
-                Location = new Point(12, 34),
-                Width = 296
+                BorderStyle = BorderStyle.None,
+                BackColor = Theme.SurfaceAlt,
+                ForeColor = Theme.Text
             };
+            var titlePanel = CreateInputPanel(_titleBox, new Point(12, 34), 296);
 
             var timeLabel = new Label
             {
                 Text = "Time counted (HH:MM:SS)",
                 Location = new Point(12, 66),
-                AutoSize = true
+                AutoSize = true,
+                ForeColor = Theme.TextMuted
             };
             _timeBox = new TextBox
             {
                 Text = Workspace.Format(elapsedSeconds),
-                Location = new Point(12, 85),
-                Width = 296
+                BorderStyle = BorderStyle.None,
+                BackColor = Theme.SurfaceAlt,
+                ForeColor = Theme.Text,
+                Font = new Font("Consolas", 9f, FontStyle.Regular)
             };
+            var timePanel = CreateInputPanel(_timeBox, new Point(12, 85), 296);
 
             var okButton = new Button
             {
                 Text = "OK",
                 DialogResult = DialogResult.OK,
-                Location = new Point(152, 116),
-                Width = 75
+                Location = new Point(152, 120),
+                Size = new Size(75, 30)
             };
+            Theme.StyleButton(okButton, Theme.Accent, Theme.AccentHover, Color.White);
             okButton.Click += OnOk;
 
             var cancelButton = new Button
             {
                 Text = "Cancel",
                 DialogResult = DialogResult.Cancel,
-                Location = new Point(233, 116),
-                Width = 75
+                Location = new Point(233, 120),
+                Size = new Size(75, 30)
             };
+            Theme.StyleSurfaceButton(cancelButton);
 
             Controls.Add(titleLabel);
-            Controls.Add(_titleBox);
+            Controls.Add(titlePanel);
             Controls.Add(timeLabel);
-            Controls.Add(_timeBox);
+            Controls.Add(timePanel);
             Controls.Add(okButton);
             Controls.Add(cancelButton);
 
             AcceptButton = okButton;
             CancelButton = cancelButton;
+        }
+
+        // Hosts a borderless TextBox inside a bordered panel so the text has a
+        // natural inset (padding) on all sides instead of hugging the border.
+        private static Panel CreateInputPanel(TextBox box, Point location, int width)
+        {
+            const int padX = 8;
+            const int padY = 6;
+
+            var panel = new Panel
+            {
+                Location = location,
+                Width = width,
+                BackColor = Theme.SurfaceAlt,
+                BorderStyle = BorderStyle.FixedSingle
+            };
+
+            box.Location = new Point(padX, padY);
+            box.Width = width - (padX * 2) - 2;
+            panel.Height = box.PreferredHeight + (padY * 2);
+            box.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            panel.Controls.Add(box);
+            return panel;
+        }
+
+        protected override void OnHandleCreated(EventArgs e)
+        {
+            base.OnHandleCreated(e);
+            Interop.NativeMethods.UseDarkTitleBar(Handle);
         }
 
         private void OnOk(object sender, EventArgs e)

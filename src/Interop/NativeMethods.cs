@@ -20,5 +20,27 @@ namespace WorkMode.Interop
 
         [DllImport("kernel32.dll")]
         public static extern uint SetThreadExecutionState(uint esFlags);
+
+        // ---- Dark title bar (Windows 10 1809+ / Windows 11) ----
+        // DWMWA_USE_IMMERSIVE_DARK_MODE was 19 on early builds, then 20.
+        public const int DWMWA_USE_IMMERSIVE_DARK_MODE_OLD = 19;
+        public const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
+
+        [DllImport("dwmapi.dll")]
+        public static extern int DwmSetWindowAttribute(
+            IntPtr hwnd, int attribute, ref int value, int size);
+
+        // Asks the DWM to paint the given window's title bar in dark mode.
+        // Silently ignored on OS versions that don't support it.
+        public static void UseDarkTitleBar(IntPtr hwnd)
+        {
+            int enabled = 1;
+            try
+            {
+                if (DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref enabled, sizeof(int)) != 0)
+                    DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE_OLD, ref enabled, sizeof(int));
+            }
+            catch { }
+        }
     }
 }

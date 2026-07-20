@@ -20,6 +20,10 @@ namespace WorkMode.Configuration
     {
         public List<Workspace> Workspaces { get; private set; }
 
+        // Persisted window size. 0 means "not set" (use the default / minimum).
+        public int WindowWidth { get; set; }
+        public int WindowHeight { get; set; }
+
         public AppConfig()
         {
             Workspaces = new List<Workspace>();
@@ -47,6 +51,7 @@ namespace WorkMode.Configuration
                 string currentTitle = null;
                 long currentSeconds = 0;
                 bool inWorkspace = false;
+                bool inWindow = false;
 
                 foreach (string raw in File.ReadAllLines(path))
                 {
@@ -60,18 +65,29 @@ namespace WorkMode.Configuration
 
                         string section = line.Substring(1, line.Length - 2).Trim();
                         inWorkspace = section.Equals("Workspace", StringComparison.OrdinalIgnoreCase);
+                        inWindow = section.Equals("Window", StringComparison.OrdinalIgnoreCase);
                         currentTitle = null;
                         currentSeconds = 0;
                         continue;
                     }
 
-                    if (!inWorkspace) continue;
+                    if (!inWorkspace && !inWindow) continue;
 
                     int eq = line.IndexOf('=');
                     if (eq <= 0) continue;
 
                     string keyName = line.Substring(0, eq).Trim();
                     string value = line.Substring(eq + 1).Trim();
+
+                    if (inWindow)
+                    {
+                        int n;
+                        if (keyName.Equals("Width", StringComparison.OrdinalIgnoreCase) && int.TryParse(value, out n))
+                            cfg.WindowWidth = n;
+                        else if (keyName.Equals("Height", StringComparison.OrdinalIgnoreCase) && int.TryParse(value, out n))
+                            cfg.WindowHeight = n;
+                        continue;
+                    }
 
                     if (keyName.Equals("Title", StringComparison.OrdinalIgnoreCase))
                         currentTitle = value;
@@ -105,6 +121,14 @@ namespace WorkMode.Configuration
                 sb.AppendLine("# Lines starting with # or ; are comments.");
                 sb.AppendLine("# Each [Workspace] section stores one tracked workspace.");
                 sb.AppendLine();
+
+                if (WindowWidth > 0 && WindowHeight > 0)
+                {
+                    sb.AppendLine("[Window]");
+                    sb.AppendLine("Width=" + WindowWidth);
+                    sb.AppendLine("Height=" + WindowHeight);
+                    sb.AppendLine();
+                }
 
                 foreach (Workspace ws in Workspaces)
                 {

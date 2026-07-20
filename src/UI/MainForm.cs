@@ -25,8 +25,15 @@ namespace WorkMode.UI
 
             Text = "Work Mode";
             StartPosition = FormStartPosition.CenterScreen;
-            ClientSize = new Size(420, 480);
-            MinimumSize = new Size(360, 300);
+            // Minimum height is roughly half the old 300px floor so the window can
+            // sit compactly; the app opens at this minimum unless a size is saved.
+            MinimumSize = new Size(360, 170);
+
+            int startWidth = _config.WindowWidth > 0 ? _config.WindowWidth : 420;
+            int startHeight = _config.WindowHeight > 0 ? _config.WindowHeight : MinimumSize.Height;
+            Size = new Size(startWidth, startHeight);
+
+            Theme.ApplyForm(this);
 
             Icon appIcon = IconLoader.LoadAppIcon();
             if (appIcon != null) Icon = appIcon;
@@ -38,16 +45,23 @@ namespace WorkMode.UI
                 FlowDirection = FlowDirection.TopDown,
                 WrapContents = false,
                 AutoScroll = true,
-                Padding = new Padding(10)
+                Padding = new Padding(10),
+                BackColor = Theme.Background
             };
 
-            var addPanel = new Panel { Dock = DockStyle.Bottom, Height = 56 };
+            var addPanel = new Panel { Dock = DockStyle.Bottom, Height = 56, BackColor = Theme.Background };
             var addButton = new Button
             {
                 Text = "Add Workspace",
-                Size = new Size(140, 34),
-                Location = new Point(10, 11)
+                Size = new Size(150, 36),
+                Location = new Point(10, 10),
+                Image = Glyphs.Plus(16, Color.White),
+                TextImageRelation = TextImageRelation.ImageBeforeText,
+                ImageAlign = ContentAlignment.MiddleLeft,
+                TextAlign = ContentAlignment.MiddleCenter,
+                Padding = new Padding(6, 0, 0, 0)
             };
+            Theme.StyleButton(addButton, Theme.Accent, Theme.AccentHover, Color.White);
             addButton.Click += OnAddWorkspace;
             addPanel.Controls.Add(addButton);
 
@@ -65,7 +79,24 @@ namespace WorkMode.UI
             _tickTimer.Tick += OnTick;
             _tickTimer.Start();
 
+            ResizeEnd += (s, e) => SaveWindowSize();
             FormClosing += (s, e) => Cleanup();
+        }
+
+        // Paint the title bar dark once the native window handle exists.
+        protected override void OnHandleCreated(EventArgs e)
+        {
+            base.OnHandleCreated(e);
+            Interop.NativeMethods.UseDarkTitleBar(Handle);
+        }
+
+        // Records the current window size so it can be restored next launch.
+        private void SaveWindowSize()
+        {
+            if (WindowState != FormWindowState.Normal) return;
+            _config.WindowWidth = Width;
+            _config.WindowHeight = Height;
+            _config.Save();
         }
 
         private void AddRow(Workspace ws)
@@ -181,6 +212,12 @@ namespace WorkMode.UI
             foreach (Workspace ws in _config.Workspaces)
                 ws.Stop();
 
+            // Persist the final window size as well as workspace state.
+            if (WindowState == FormWindowState.Normal)
+            {
+                _config.WindowWidth = Width;
+                _config.WindowHeight = Height;
+            }
             _config.Save();
             _activity.Dispose();
         }
