@@ -3,7 +3,7 @@ using System.Drawing;
 using System.IO;
 using System.Windows.Forms;
 
-namespace FakeActiveUser.UI
+namespace WorkMode.UI
 {
     // Loads the application icon used for the window and the tray.
     internal static class IconLoader

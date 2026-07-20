@@ -1,5 +1,5 @@
 @echo off
-REM Builds FakeActiveUser.exe using the C# compiler that ships with Windows (.NET Framework).
+REM Builds WorkMode.exe using the C# compiler that ships with Windows (.NET Framework).
 REM No SDK, no downloads, no runtime install required.
 
 setlocal
@@ -15,7 +15,7 @@ if not exist "%CSC%" (
 set "ICON="
 if exist "app.ico" set "ICON=/win32icon:app.ico"
 
-"%CSC%" /nologo /target:winexe /optimize+ /out:FakeActiveUser.exe %ICON% ^
+"%CSC%" /nologo /target:winexe /optimize+ /out:WorkMode.exe %ICON% ^
     /reference:System.Windows.Forms.dll ^
     /reference:System.Drawing.dll ^
     /recurse:src\*.cs
@@ -25,5 +25,5 @@ if %ERRORLEVEL% neq 0 (
     exit /b %ERRORLEVEL%
 )
 
-echo Build succeeded: FakeActiveUser.exe
+echo Build succeeded: WorkMode.exe
 endlocal

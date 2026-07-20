@@ -1,9 +1,9 @@
 using System;
 using System.Windows.Forms;
-using FakeActiveUser.Configuration;
-using FakeActiveUser.UI;
+using WorkMode.Configuration;
+using WorkMode.UI;
 
-namespace FakeActiveUser
+namespace WorkMode
 {
     internal static class Program
     {
@@ -12,7 +12,7 @@ namespace FakeActiveUser
         {
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
-            Application.Run(new OverlayForm(AppConfig.Load()));
+            Application.Run(new MainForm(AppConfig.Load()));
         }
     }
 }
