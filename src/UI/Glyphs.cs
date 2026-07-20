@@ -42,14 +42,38 @@ namespace WorkMode.UI
         {
             Graphics g;
             var bmp = NewBitmap(size, out g);
-            using (var pen = new Pen(color, size * 0.10f) { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round })
+
+            // A diagonal pencil: pointed tip at the lower-left, eraser end at the
+            // upper-right, drawn as a solid silhouette so it reads clearly as "edit".
+            var tip = new PointF(size * 0.20f, size * 0.80f);
+            var end = new PointF(size * 0.80f, size * 0.20f);
+
+            float dx = end.X - tip.X, dy = end.Y - tip.Y;
+            float len = (float)System.Math.Sqrt(dx * dx + dy * dy);
+            float ux = dx / len, uy = dy / len;   // along the pencil
+            float px = -uy, py = ux;               // perpendicular
+
+            float half = size * 0.115f;            // half-width of the shaft
+            float tipLen = size * 0.24f;           // length of the pointed nib
+
+            var baseCenter = new PointF(tip.X + ux * tipLen, tip.Y + uy * tipLen);
+            var b1 = new PointF(baseCenter.X + px * half, baseCenter.Y + py * half);
+            var b2 = new PointF(baseCenter.X - px * half, baseCenter.Y - py * half);
+            var e1 = new PointF(end.X + px * half, end.Y + py * half);
+            var e2 = new PointF(end.X - px * half, end.Y - py * half);
+
+            using (var brush = new SolidBrush(color))
             {
-                float lo = size * 0.26f;
-                float hi = size * 0.74f;
-                // Pencil body (diagonal stroke).
-                g.DrawLine(pen, lo, hi, hi, lo);
-                // Pencil tip base.
-                g.DrawLine(pen, lo, hi, lo + size * 0.06f, hi - size * 0.14f);
+                using (var body = new GraphicsPath())
+                {
+                    body.AddPolygon(new[] { b1, e1, e2, b2 });
+                    g.FillPath(brush, body);
+                }
+                using (var nib = new GraphicsPath())
+                {
+                    nib.AddPolygon(new[] { tip, b1, b2 });
+                    g.FillPath(brush, nib);
+                }
             }
             g.Dispose();
             return bmp;
@@ -76,6 +100,9 @@ namespace WorkMode.UI
             g = Graphics.FromImage(bmp);
             g.SmoothingMode = SmoothingMode.AntiAlias;
             g.Clear(Color.Transparent);
+            // Nudge everything up ~1px; on the buttons the glyphs otherwise read
+            // as sitting a touch below the vertical centre.
+            g.TranslateTransform(0f, -1f);
             return bmp;
         }
 

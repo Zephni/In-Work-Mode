@@ -71,9 +71,9 @@ namespace WorkMode.UI
             _editButton = new Button
             {
                 Text = "Edit",
-                Size = new Size(66, 30),
+                Size = new Size(78, 30),
                 Anchor = AnchorStyles.Top | AnchorStyles.Right,
-                Image = Glyphs.Edit(16, Theme.Text),
+                Image = Glyphs.Edit(20, Theme.Text),
                 TextImageRelation = TextImageRelation.ImageBeforeText,
                 ImageAlign = ContentAlignment.MiddleLeft,
                 TextAlign = ContentAlignment.MiddleCenter,
@@ -141,13 +141,13 @@ namespace WorkMode.UI
             if (_workspace.IsRunning)
             {
                 _toggleButton.Text = "Stop";
-                _toggleButton.Image = Glyphs.Stop(14, Color.White);
+                _toggleButton.Image = Glyphs.Stop(20, Color.White);
                 Theme.StyleButton(_toggleButton, Theme.Danger, Theme.DangerHover, Color.White);
             }
             else
             {
                 _toggleButton.Text = "Start";
-                _toggleButton.Image = Glyphs.Play(14, Color.White);
+                _toggleButton.Image = Glyphs.Play(20, Color.White);
                 Theme.StyleButton(_toggleButton, Theme.Accent, Theme.AccentHover, Color.White);
             }
 

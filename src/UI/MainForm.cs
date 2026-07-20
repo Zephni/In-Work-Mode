@@ -53,9 +53,9 @@ namespace WorkMode.UI
             var addButton = new Button
             {
                 Text = "Add Workspace",
-                Size = new Size(150, 36),
-                Location = new Point(10, 10),
-                Image = Glyphs.Plus(16, Color.White),
+                Size = new Size(150, 30),
+                Location = new Point(10, 13),
+                Image = Glyphs.Plus(20, Color.White),
                 TextImageRelation = TextImageRelation.ImageBeforeText,
                 ImageAlign = ContentAlignment.MiddleLeft,
                 TextAlign = ContentAlignment.MiddleCenter,

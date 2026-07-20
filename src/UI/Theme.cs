@@ -43,7 +43,7 @@ namespace WorkMode.UI
             button.FlatAppearance.MouseDownBackColor = hover;
             button.BackColor = fill;
             button.ForeColor = foreColor;
-            button.Font = new Font("Segoe UI", 9f, FontStyle.Regular);
+            button.Font = new Font("Segoe UI Semibold", 9f, FontStyle.Regular);
             button.UseVisualStyleBackColor = false;
             button.Cursor = Cursors.Hand;
         }
