@@ -17,13 +17,29 @@ namespace WorkMode.UI
         private readonly Label _timeLabel;
         private readonly Button _toggleButton;
         private readonly Button _editButton;
+        private bool _selected;
+        private bool _hover;
 
         // Raised when the user toggles this workspace's timer on or off.
         public event EventHandler ToggleRequested;
         // Raised when the user asks to edit this workspace.
         public event EventHandler EditRequested;
+        // Raised when the user clicks the row to select it.
+        public event EventHandler SelectRequested;
 
         public Workspace Workspace { get { return _workspace; } }
+
+        // Whether this row is currently the selected one (accent border).
+        public bool Selected
+        {
+            get { return _selected; }
+            set
+            {
+                if (_selected == value) return;
+                _selected = value;
+                Invalidate();
+            }
+        }
 
         public WorkspaceControl(Workspace workspace)
         {
@@ -87,6 +103,21 @@ namespace WorkMode.UI
             Controls.Add(_toggleButton);
             Controls.Add(_editButton);
 
+            // Clicking the card body (anywhere that isn't a button) selects the row.
+            Click += OnSelectClick;
+            _titleLabel.Click += OnSelectClick;
+            _timeLabel.Click += OnSelectClick;
+
+            // Track hover across the card and its children so a subtle accent
+            // border can hint that the row is clickable.
+            MouseEnter += OnHoverChanged;
+            MouseLeave += OnHoverChanged;
+            foreach (Control child in Controls)
+            {
+                child.MouseEnter += OnHoverChanged;
+                child.MouseLeave += OnHoverChanged;
+            }
+
             Resize += (s, e) => LayoutButtons();
             LayoutButtons();
             Refresh();
@@ -98,14 +129,39 @@ namespace WorkMode.UI
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
             e.Graphics.Clear(Theme.Background);
 
-            var rect = new Rectangle(0, 0, Width - 1, Height - 1);
+            // Inset by one pixel when selected so the thicker accent border isn't
+            // clipped at the control edges.
+            int inset = _selected ? 1 : 0;
+            var rect = new Rectangle(inset, inset, Width - 1 - inset * 2, Height - 1 - inset * 2);
             using (var path = RoundedRect(rect, CornerRadius))
             using (var fill = new SolidBrush(Theme.Surface))
-            using (var pen = new Pen(Theme.Border))
+            using (var pen = BorderPen())
             {
                 e.Graphics.FillPath(fill, path);
                 e.Graphics.DrawPath(pen, path);
             }
+        }
+
+        // Selected: solid accent. Hovered: faint accent hint. Otherwise: plain border.
+        private Pen BorderPen()
+        {
+            if (_selected) return new Pen(Theme.Accent, 2f);
+            if (_hover) return new Pen(Color.FromArgb(90, Theme.Accent));
+            return new Pen(Theme.Border);
+        }
+
+        private void OnHoverChanged(object sender, EventArgs e)
+        {
+            bool hovering = ClientRectangle.Contains(PointToClient(Cursor.Position));
+            if (_hover == hovering) return;
+            _hover = hovering;
+            Invalidate();
+        }
+
+        private void OnSelectClick(object sender, EventArgs e)
+        {
+            var h = SelectRequested;
+            if (h != null) h(this, EventArgs.Empty);
         }
 
         private static GraphicsPath RoundedRect(Rectangle r, int radius)

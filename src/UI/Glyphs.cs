@@ -94,6 +94,38 @@ namespace WorkMode.UI
             return bmp;
         }
 
+        public static Bitmap Trash(int size, Color color)
+        {
+            Graphics g;
+            var bmp = NewBitmap(size, out g);
+            using (var brush = new SolidBrush(color))
+            using (var pen = new Pen(color, size * 0.09f) { StartCap = LineCap.Round, EndCap = LineCap.Round })
+            {
+                float cx = size / 2f;
+                // Lid and handle across the top.
+                float lidY = size * 0.28f;
+                g.DrawLine(pen, size * 0.20f, lidY, size * 0.80f, lidY);
+                g.DrawLine(pen, size * 0.40f, lidY, size * 0.42f, size * 0.18f);
+                g.DrawLine(pen, size * 0.60f, lidY, size * 0.58f, size * 0.18f);
+                g.DrawLine(pen, size * 0.42f, size * 0.18f, size * 0.58f, size * 0.18f);
+
+                // Can body (tapered bucket).
+                using (var body = new GraphicsPath())
+                {
+                    body.AddPolygon(new[]
+                    {
+                        new PointF(size * 0.26f, lidY + size * 0.04f),
+                        new PointF(size * 0.74f, lidY + size * 0.04f),
+                        new PointF(size * 0.68f, size * 0.82f),
+                        new PointF(size * 0.32f, size * 0.82f)
+                    });
+                    g.FillPath(brush, body);
+                }
+            }
+            g.Dispose();
+            return bmp;
+        }
+
         private static Bitmap NewBitmap(int size, out Graphics g)
         {
             var bmp = new Bitmap(size, size);

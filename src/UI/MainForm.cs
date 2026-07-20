@@ -17,6 +17,8 @@ namespace WorkMode.UI
         private readonly ActivitySimulator _activity;
         private readonly FlowLayoutPanel _list;
         private readonly Timer _tickTimer;
+        private readonly Button _deleteButton;
+        private WorkspaceControl _selectedRow;
 
         public MainForm(AppConfig config)
         {
@@ -29,8 +31,8 @@ namespace WorkMode.UI
             // sit compactly; the app opens at this minimum unless a size is saved.
             MinimumSize = new Size(360, 170);
 
-            int startWidth = _config.WindowWidth > 0 ? _config.WindowWidth : 440;
-            int startHeight = _config.WindowHeight > 0 ? _config.WindowHeight : 260;
+            int startWidth = _config.WindowWidth > 0 ? _config.WindowWidth : 640;
+            int startHeight = _config.WindowHeight > 0 ? _config.WindowHeight : 380;
             Size = new Size(startWidth, startHeight);
 
             Theme.ApplyForm(this);
@@ -65,8 +67,33 @@ namespace WorkMode.UI
             addButton.Click += OnAddWorkspace;
             addPanel.Controls.Add(addButton);
 
+            // Delete button: only visible while a workspace row is selected.
+            _deleteButton = new Button
+            {
+                Text = "Delete",
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                MinimumSize = new Size(0, 30),
+                Location = new Point(addButton.Right + 10, 13),
+                Image = Glyphs.Trash(20, Color.White),
+                TextImageRelation = TextImageRelation.ImageBeforeText,
+                ImageAlign = ContentAlignment.MiddleLeft,
+                TextAlign = ContentAlignment.MiddleCenter,
+                Padding = new Padding(6, 0, 12, 0),
+                Visible = false
+            };
+            Theme.StyleButton(_deleteButton, Theme.Danger, Theme.DangerHover, Color.White);
+            _deleteButton.Click += OnDeleteWorkspace;
+            addPanel.Controls.Add(_deleteButton);
+
             Controls.Add(_list);
             Controls.Add(addPanel);
+
+            // Clicking empty space (the list background, panels or the form) clears
+            // the current selection. Buttons and rows handle their own clicks first.
+            Click += (s, e) => ClearSelection();
+            _list.Click += (s, e) => ClearSelection();
+            addPanel.Click += (s, e) => ClearSelection();
 
             foreach (Workspace ws in _config.Workspaces)
                 AddRow(ws);
@@ -104,8 +131,51 @@ namespace WorkMode.UI
             var row = new WorkspaceControl(ws);
             row.ToggleRequested += OnToggle;
             row.EditRequested += OnEdit;
+            row.SelectRequested += OnRowSelected;
             _list.Controls.Add(row);
             SizeRow(row);
+        }
+
+        // Selects the clicked row, highlighting it and revealing the Delete button.
+        private void OnRowSelected(object sender, EventArgs e)
+        {
+            var row = sender as WorkspaceControl;
+            if (row == null) return;
+
+            if (_selectedRow != null && _selectedRow != row)
+                _selectedRow.Selected = false;
+
+            _selectedRow = row;
+            _selectedRow.Selected = true;
+            _deleteButton.Visible = true;
+        }
+
+        // Clears any current selection and hides the Delete button.
+        private void ClearSelection()
+        {
+            if (_selectedRow != null)
+            {
+                _selectedRow.Selected = false;
+                _selectedRow = null;
+            }
+            _deleteButton.Visible = false;
+        }
+
+        private void OnDeleteWorkspace(object sender, EventArgs e)
+        {
+            WorkspaceControl row = _selectedRow;
+            if (row == null) return;
+
+            Workspace ws = row.Workspace;
+            ws.Stop();
+
+            _list.Controls.Remove(row);
+            row.Dispose();
+            _config.Workspaces.Remove(ws);
+
+            ClearSelection();
+            UpdateActivityState();
+            _config.Save();
         }
 
         private void ResizeRows()
