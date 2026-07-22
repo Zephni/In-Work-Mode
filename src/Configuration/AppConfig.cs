@@ -50,6 +50,7 @@ namespace WorkMode.Configuration
 
                 string currentTitle = null;
                 long currentSeconds = 0;
+                string currentNotes = null;
                 bool inWorkspace = false;
                 bool inWindow = false;
 
@@ -61,13 +62,14 @@ namespace WorkMode.Configuration
                     if (line[0] == '[' && line[line.Length - 1] == ']')
                     {
                         // New section: flush the previous workspace (if any).
-                        if (inWorkspace) cfg.Add(currentTitle, currentSeconds);
+                        if (inWorkspace) cfg.Add(currentTitle, currentSeconds, currentNotes);
 
                         string section = line.Substring(1, line.Length - 2).Trim();
                         inWorkspace = section.Equals("Workspace", StringComparison.OrdinalIgnoreCase);
                         inWindow = section.Equals("Window", StringComparison.OrdinalIgnoreCase);
                         currentTitle = null;
                         currentSeconds = 0;
+                        currentNotes = null;
                         continue;
                     }
 
@@ -96,18 +98,52 @@ namespace WorkMode.Configuration
                         long s;
                         if (long.TryParse(value, out s)) currentSeconds = s;
                     }
+                    else if (keyName.Equals("Notes", StringComparison.OrdinalIgnoreCase))
+                        currentNotes = UnescapeNotes(value);
                 }
 
                 // Flush the final workspace.
-                if (inWorkspace) cfg.Add(currentTitle, currentSeconds);
+                if (inWorkspace) cfg.Add(currentTitle, currentSeconds, currentNotes);
             }
             catch { }
             return cfg;
         }
 
-        private void Add(string title, long seconds)
+        private void Add(string title, long seconds, string notes)
         {
-            Workspaces.Add(new Workspace(title ?? string.Empty, seconds));
+            Workspaces.Add(new Workspace(title ?? string.Empty, seconds)
+            {
+                Notes = notes ?? string.Empty
+            });
+        }
+
+        // Notes may span multiple lines, so newlines (and backslashes) are escaped
+        // into a single INI value on save and restored on load.
+        private static string EscapeNotes(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return string.Empty;
+            return s.Replace("\\", "\\\\")
+                    .Replace("\r\n", "\n")
+                    .Replace("\r", "\n")
+                    .Replace("\n", "\\n");
+        }
+
+        private static string UnescapeNotes(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return string.Empty;
+            var sb = new StringBuilder(s.Length);
+            for (int i = 0; i < s.Length; i++)
+            {
+                char c = s[i];
+                if (c == '\\' && i + 1 < s.Length)
+                {
+                    char n = s[i + 1];
+                    if (n == 'n') { sb.Append("\r\n"); i++; continue; }
+                    if (n == '\\') { sb.Append('\\'); i++; continue; }
+                }
+                sb.Append(c);
+            }
+            return sb.ToString();
         }
 
         // Persists all workspaces to config.ini. Running workspaces are synced
@@ -136,6 +172,8 @@ namespace WorkMode.Configuration
                     sb.AppendLine("[Workspace]");
                     sb.AppendLine("Title=" + (ws.Title ?? string.Empty));
                     sb.AppendLine("Seconds=" + ws.ElapsedSeconds);
+                    if (!string.IsNullOrEmpty(ws.Notes))
+                        sb.AppendLine("Notes=" + EscapeNotes(ws.Notes));
                     sb.AppendLine();
                 }
 

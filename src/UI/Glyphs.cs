@@ -160,6 +160,30 @@ namespace WorkMode.UI
             return bmp;
         }
 
+        public static Bitmap Info(int size, Color color)
+        {
+            Graphics g;
+            var bmp = NewBitmap(size, out g);
+            float cx = size / 2f;
+            float strokeW = size * 0.10f;
+            float m = size * 0.10f;
+            var rect = new RectangleF(m, m, size - 2 * m, size - 2 * m);
+
+            using (var pen = new Pen(color, strokeW) { LineJoin = LineJoin.Round })
+                g.DrawEllipse(pen, rect);
+
+            float dotR = size * 0.08f;
+            float dotY = size * 0.32f;
+            using (var brush = new SolidBrush(color))
+                g.FillEllipse(brush, cx - dotR, dotY - dotR, dotR * 2, dotR * 2);
+
+            using (var pen = new Pen(color, strokeW) { StartCap = LineCap.Round, EndCap = LineCap.Round })
+                g.DrawLine(pen, cx, size * 0.47f, cx, size * 0.72f);
+
+            g.Dispose();
+            return bmp;
+        }
+
         private static Bitmap NewBitmap(int size, out Graphics g)
         {
             var bmp = new Bitmap(size, size);

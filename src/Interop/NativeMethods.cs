@@ -30,6 +30,33 @@ namespace WorkMode.Interop
         public static extern int DwmSetWindowAttribute(
             IntPtr hwnd, int attribute, ref int value, int size);
 
+        // ---- TextBox inner padding ----
+        public const int EM_SETMARGINS = 0x00D3;
+        public const int EM_SETRECT = 0x00B3;
+        public const int EC_LEFTMARGIN = 0x0001;
+        public const int EC_RIGHTMARGIN = 0x0002;
+
+        [DllImport("user32.dll")]
+        public static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
+
+        [DllImport("user32.dll")]
+        public static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, ref RECT lParam);
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct RECT { public int Left, Top, Right, Bottom; }
+
+        // Sets horizontal margins (left/right) and a top inset on a TextBox handle.
+        public static void SetTextBoxPadding(IntPtr hwnd, int h, int v, int width, int height)
+        {
+            // Left and right margins via EM_SETMARGINS.
+            int margins = (h & 0xFFFF) | ((h & 0xFFFF) << 16);
+            SendMessage(hwnd, EM_SETMARGINS, new IntPtr(EC_LEFTMARGIN | EC_RIGHTMARGIN), new IntPtr(margins));
+
+            // Formatting rect insets all four edges.
+            var rect = new RECT { Left = h, Top = v, Right = width - h, Bottom = height - v };
+            SendMessage(hwnd, EM_SETRECT, IntPtr.Zero, ref rect);
+        }
+
         // Asks the DWM to paint the given window's title bar in dark mode.
         // Silently ignored on OS versions that don't support it.
         public static void UseDarkTitleBar(IntPtr hwnd)

@@ -13,6 +13,9 @@ namespace WorkMode.Models
         // Total counted time, in whole seconds. Kept current while running.
         public long ElapsedSeconds { get; set; }
 
+        // Free-form notes the user can jot against this workspace.
+        public string Notes { get; set; }
+
         public bool IsRunning { get; private set; }
 
         private Stopwatch _stopwatch;
@@ -22,6 +25,7 @@ namespace WorkMode.Models
         {
             Title = title ?? string.Empty;
             ElapsedSeconds = elapsedSeconds < 0 ? 0 : elapsedSeconds;
+            Notes = string.Empty;
         }
 
         public void Start()

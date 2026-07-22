@@ -17,6 +17,7 @@ namespace WorkMode.UI
         private readonly ActivitySimulator _activity;
         private readonly FlowLayoutPanel _list;
         private readonly Timer _tickTimer;
+        private readonly Button _editButton;
         private readonly Button _deleteButton;
         private WorkspaceControl _selectedRow;
 
@@ -67,6 +68,25 @@ namespace WorkMode.UI
             addButton.Click += OnAddWorkspace;
             addPanel.Controls.Add(addButton);
 
+            // Edit button: only visible while a workspace row is selected.
+            _editButton = new Button
+            {
+                Text = "Edit",
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                MinimumSize = new Size(0, 30),
+                Location = new Point(addButton.Right + 10, 13),
+                Image = Glyphs.Edit(20, Color.White),
+                TextImageRelation = TextImageRelation.ImageBeforeText,
+                ImageAlign = ContentAlignment.MiddleLeft,
+                TextAlign = ContentAlignment.MiddleCenter,
+                Padding = new Padding(6, 0, 12, 0),
+                Visible = false
+            };
+            Theme.StyleButton(_editButton, Theme.Blue, Theme.BlueHover, Color.White);
+            _editButton.Click += OnEditWorkspace;
+            addPanel.Controls.Add(_editButton);
+
             // Delete button: only visible while a workspace row is selected.
             _deleteButton = new Button
             {
@@ -74,7 +94,7 @@ namespace WorkMode.UI
                 AutoSize = true,
                 AutoSizeMode = AutoSizeMode.GrowAndShrink,
                 MinimumSize = new Size(0, 30),
-                Location = new Point(addButton.Right + 10, 13),
+                Location = new Point(_editButton.Right + 10, 13),
                 Image = Glyphs.Trash(20, Color.White),
                 TextImageRelation = TextImageRelation.ImageBeforeText,
                 ImageAlign = ContentAlignment.MiddleLeft,
@@ -131,13 +151,13 @@ namespace WorkMode.UI
             var row = new WorkspaceControl(ws);
             row.ToggleRequested += OnToggle;
             row.ResetRequested += OnReset;
-            row.EditRequested += OnEdit;
             row.SelectRequested += OnRowSelected;
+            row.NotesChanged += OnNotesChanged;
             _list.Controls.Add(row);
             SizeRow(row);
         }
 
-        // Selects the clicked row, highlighting it and revealing the Delete button.
+        // Selects the clicked row, highlighting it and revealing the Edit / Delete buttons.
         private void OnRowSelected(object sender, EventArgs e)
         {
             var row = sender as WorkspaceControl;
@@ -148,10 +168,17 @@ namespace WorkMode.UI
 
             _selectedRow = row;
             _selectedRow.Selected = true;
+            _editButton.Visible = true;
             _deleteButton.Visible = true;
         }
 
-        // Clears any current selection and hides the Delete button.
+        // Persists notes as the user types into a workspace's notes area.
+        private void OnNotesChanged(object sender, EventArgs e)
+        {
+            _config.Save();
+        }
+
+        // Clears any current selection and hides the Edit / Delete buttons.
         private void ClearSelection()
         {
             if (_selectedRow != null)
@@ -159,6 +186,7 @@ namespace WorkMode.UI
                 _selectedRow.Selected = false;
                 _selectedRow = null;
             }
+            _editButton.Visible = false;
             _deleteButton.Visible = false;
         }
 
@@ -237,9 +265,11 @@ namespace WorkMode.UI
             _config.Save();
         }
 
-        private void OnEdit(object sender, EventArgs e)
+        private void OnEditWorkspace(object sender, EventArgs e)
         {
-            var row = (WorkspaceControl)sender;
+            WorkspaceControl row = _selectedRow;
+            if (row == null) return;
+
             Workspace ws = row.Workspace;
 
             // Capture the live total before editing.
