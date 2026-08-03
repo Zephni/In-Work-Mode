@@ -128,6 +128,8 @@ namespace WorkMode.UI
 
             ResizeEnd += (s, e) => SaveWindowSize();
             FormClosing += (s, e) => Cleanup();
+
+            _activity.Start();
         }
 
         // Paint the title bar dark once the native window handle exists.
@@ -310,15 +312,8 @@ namespace WorkMode.UI
             if (anyRunning) _config.Save();
         }
 
-        // Keeps the activity simulator running only while a timer is active.
         private void UpdateActivityState()
         {
-            bool anyRunning = false;
-            foreach (Workspace ws in _config.Workspaces)
-                if (ws.IsRunning) { anyRunning = true; break; }
-
-            if (anyRunning) _activity.Start();
-            else _activity.Stop();
         }
 
         private void Cleanup()
