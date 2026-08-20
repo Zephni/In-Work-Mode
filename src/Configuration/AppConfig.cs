@@ -7,7 +7,9 @@ using WorkMode.Models;
 
 namespace WorkMode.Configuration
 {
-    // INI-backed configuration. Loaded from / saved to config.ini next to the exe.
+    // INI-backed configuration. Loaded from / saved to config.ini in the user's
+    // per-user app data folder (%AppData%\WorkMode\config.ini), which is always
+    // writable regardless of where the exe is installed/run from.
     // Each workspace is stored as a "[Workspace]" section with Title and Seconds
     // keys, e.g.
     //
@@ -29,7 +31,22 @@ namespace WorkMode.Configuration
             Workspaces = new List<Workspace>();
         }
 
+        private static string ConfigDirectory
+        {
+            get
+            {
+                string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+                return Path.Combine(appData, "WorkMode");
+            }
+        }
+
         private static string ConfigPath
+        {
+            get { return Path.Combine(ConfigDirectory, "config.ini"); }
+        }
+
+        // Old location used by earlier versions: config.ini next to the exe.
+        private static string LegacyConfigPath
         {
             get
             {
@@ -38,13 +55,34 @@ namespace WorkMode.Configuration
             }
         }
 
-        // Loads config.ini from the exe folder. A missing or invalid file simply
-        // yields an empty workspace list so the app always starts.
+        // One-time migration: if a config already exists next to the exe (from an
+        // older version) but none exists yet in app data, copy it over so users
+        // don't lose their existing workspaces/settings.
+        private static void MigrateLegacyConfigIfNeeded()
+        {
+            try
+            {
+                string newPath = ConfigPath;
+                if (File.Exists(newPath)) return;
+
+                string oldPath = LegacyConfigPath;
+                if (!File.Exists(oldPath)) return;
+
+                Directory.CreateDirectory(ConfigDirectory);
+                File.Copy(oldPath, newPath);
+            }
+            catch { }
+        }
+
+        // Loads config.ini from the user's app data folder. A missing or invalid
+        // file simply yields an empty workspace list so the app always starts.
         public static AppConfig Load()
         {
             var cfg = new AppConfig();
             try
             {
+                MigrateLegacyConfigIfNeeded();
+
                 string path = ConfigPath;
                 if (!File.Exists(path)) return cfg;
 
@@ -177,6 +215,7 @@ namespace WorkMode.Configuration
                     sb.AppendLine();
                 }
 
+                Directory.CreateDirectory(ConfigDirectory);
                 File.WriteAllText(ConfigPath, sb.ToString());
             }
             catch { }
