@@ -57,6 +57,8 @@ namespace WorkMode.UI
                 Padding = new Padding(10),
                 BackColor = Theme.Background
             };
+            // Darken the native scrollbar so it matches the rest of the theme.
+            _list.HandleCreated += (s, e) => Interop.NativeMethods.UseDarkScrollBar(_list.Handle);
 
             Controls.Add(_list);
 

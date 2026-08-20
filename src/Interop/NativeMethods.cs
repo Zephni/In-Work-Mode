@@ -69,5 +69,18 @@ namespace WorkMode.Interop
             }
             catch { }
         }
+
+        // ---- Dark scrollbars (Windows 10 1809+ / Windows 11) ----
+        [DllImport("uxtheme.dll", CharSet = CharSet.Unicode)]
+        public static extern int SetWindowTheme(IntPtr hWnd, string pszSubAppName, string pszSubIdList);
+
+        // Switches a scrollable control's native scrollbars to the dark Explorer
+        // visual style so they match the app's dark theme instead of the default
+        // light-grey system scrollbar. Silently ignored if unsupported.
+        public static void UseDarkScrollBar(IntPtr hwnd)
+        {
+            try { SetWindowTheme(hwnd, "DarkMode_Explorer", null); }
+            catch { }
+        }
     }
 }
