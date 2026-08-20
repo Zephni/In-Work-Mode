@@ -22,6 +22,7 @@ namespace WorkMode.UI
         private readonly ActivitySimulator _activity;
         private readonly FlowLayoutPanel _list;
         private readonly Timer _tickTimer;
+        private readonly AddWorkspaceRow _addRow;
         private WorkspaceControl _selectedRow;
 
         public MainForm(AppConfig config)
@@ -56,20 +57,6 @@ namespace WorkMode.UI
             };
 
             var addPanel = new Panel { Dock = DockStyle.Bottom, Height = 56, BackColor = Theme.Background };
-            var addButton = new Button
-            {
-                Text = "Add Workspace",
-                Size = new Size(150, 30),
-                Location = new Point(10, 13),
-                Image = Glyphs.Plus(20, Color.White),
-                TextImageRelation = TextImageRelation.ImageBeforeText,
-                ImageAlign = ContentAlignment.MiddleLeft,
-                TextAlign = ContentAlignment.MiddleCenter,
-                Padding = new Padding(6, 0, 0, 0)
-            };
-            Theme.StyleButton(addButton, Theme.Accent, Theme.AccentHover, Color.White);
-            addButton.Click += OnAddWorkspace;
-            addPanel.Controls.Add(addButton);
 
             // Icon-only, backgroundless button that restores the window to its
             // default size. Dim until hovered so it stays out of the way.
@@ -106,6 +93,11 @@ namespace WorkMode.UI
 
             foreach (Workspace ws in _config.Workspaces)
                 AddRow(ws);
+
+            // Placeholder "card", always the last item, that opens the add dialog.
+            _addRow = new AddWorkspaceRow();
+            _addRow.AddRequested += OnAddWorkspace;
+            _list.Controls.Add(_addRow);
 
             // Fit each row to the list width.
             _list.Resize += (s, e) => ResizeRows();
@@ -158,6 +150,10 @@ namespace WorkMode.UI
             row.DeleteRequested += OnDeleteWorkspace;
             _list.Controls.Add(row);
             SizeRow(row);
+
+            // Keep the "add new" placeholder pinned to the bottom of the list.
+            if (_addRow != null)
+                _list.Controls.SetChildIndex(_addRow, _list.Controls.Count - 1);
         }
 
         // Selects the clicked row, highlighting it. Clicking an already-selected
@@ -215,14 +211,11 @@ namespace WorkMode.UI
 
         private void ResizeRows()
         {
-            foreach (Control c in _list.Controls)
-            {
-                var row = c as WorkspaceControl;
-                if (row != null) SizeRow(row);
-            }
+            foreach (Control row in _list.Controls)
+                SizeRow(row);
         }
 
-        private void SizeRow(WorkspaceControl row)
+        private void SizeRow(Control row)
         {
             int width = _list.ClientSize.Width - _list.Padding.Horizontal - row.Margin.Horizontal;
             if (width < 100) width = 100;
