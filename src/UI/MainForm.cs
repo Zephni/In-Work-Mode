@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Windows.Forms;
 using WorkMode.Activity;
@@ -23,6 +24,8 @@ namespace WorkMode.UI
         private readonly FlowLayoutPanel _list;
         private readonly Timer _tickTimer;
         private readonly AddWorkspaceRow _addRow;
+        private readonly Label _devModeLabel;
+        private readonly HashSet<Keys> _heldKeys = new HashSet<Keys>();
         private WorkspaceControl _selectedRow;
 
         public MainForm(AppConfig config)
@@ -82,6 +85,23 @@ namespace WorkMode.UI
             resetSizeTip.SetToolTip(resetSizeButton, "Restore default window size");
             addPanel.Controls.Add(resetSizeButton);
 
+            // Greyed-out indicator shown only while the hidden dev mode is on
+            // (see OnKeyDown). Sits just left of the reset-size button.
+            _devModeLabel = new Label
+            {
+                AutoSize = true,
+                Anchor = AnchorStyles.Top | AnchorStyles.Right,
+                Text = "Dev Mode",
+                Font = new Font("Segoe UI", 8f, FontStyle.Regular),
+                ForeColor = Theme.TextMuted,
+                BackColor = Color.Transparent,
+                Visible = _config.DevMode
+            };
+            addPanel.Controls.Add(_devModeLabel);
+            _devModeLabel.Location = new Point(
+                resetSizeButton.Left - _devModeLabel.PreferredWidth - 8,
+                resetSizeButton.Top + (resetSizeButton.Height - _devModeLabel.PreferredHeight) / 2);
+
             Controls.Add(_list);
             Controls.Add(addPanel);
 
@@ -109,6 +129,13 @@ namespace WorkMode.UI
 
             ResizeEnd += (s, e) => SaveWindowSize();
             FormClosing += (s, e) => Cleanup();
+
+            // Secret combo: hold Z, E, P and tap H to toggle dev mode (reveals
+            // the per-workspace edit button). Only tracked while focused.
+            KeyPreview = true;
+            KeyDown += OnMainFormKeyDown;
+            KeyUp += OnMainFormKeyUp;
+            Deactivate += (s, e) => _heldKeys.Clear();
 
             _activity.Start();
         }
@@ -139,6 +166,36 @@ namespace WorkMode.UI
             SaveWindowSize();
         }
 
+        // Tracks held-down keys; holding Z+E+P and tapping H toggles dev mode.
+        private void OnMainFormKeyDown(object sender, KeyEventArgs e)
+        {
+            _heldKeys.Add(e.KeyCode);
+            if (e.KeyCode == Keys.H &&
+                _heldKeys.Contains(Keys.Z) && _heldKeys.Contains(Keys.E) && _heldKeys.Contains(Keys.P))
+            {
+                ToggleDevMode();
+            }
+        }
+
+        private void OnMainFormKeyUp(object sender, KeyEventArgs e)
+        {
+            _heldKeys.Remove(e.KeyCode);
+        }
+
+        // Flips dev mode, persists it, and shows/hides the edit button on every row.
+        private void ToggleDevMode()
+        {
+            _config.DevMode = !_config.DevMode;
+            _config.Save();
+
+            _devModeLabel.Visible = _config.DevMode;
+            foreach (Control c in _list.Controls)
+            {
+                var row = c as WorkspaceControl;
+                if (row != null) row.EditButtonVisible = _config.DevMode;
+            }
+        }
+
         private void AddRow(Workspace ws)
         {
             var row = new WorkspaceControl(ws);
@@ -148,6 +205,7 @@ namespace WorkMode.UI
             row.NotesChanged += OnNotesChanged;
             row.EditRequested += OnEditWorkspace;
             row.DeleteRequested += OnDeleteWorkspace;
+            row.EditButtonVisible = _config.DevMode;
             _list.Controls.Add(row);
             SizeRow(row);
 

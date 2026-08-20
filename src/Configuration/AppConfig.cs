@@ -26,6 +26,10 @@ namespace WorkMode.Configuration
         public int WindowWidth { get; set; }
         public int WindowHeight { get; set; }
 
+        // Hidden developer mode, toggled via a secret key combo (see MainForm).
+        // Reveals the per-workspace edit button when enabled.
+        public bool DevMode { get; set; }
+
         public AppConfig()
         {
             Workspaces = new List<Workspace>();
@@ -91,6 +95,7 @@ namespace WorkMode.Configuration
                 string currentNotes = null;
                 bool inWorkspace = false;
                 bool inWindow = false;
+                bool inSettings = false;
 
                 foreach (string raw in File.ReadAllLines(path))
                 {
@@ -105,13 +110,14 @@ namespace WorkMode.Configuration
                         string section = line.Substring(1, line.Length - 2).Trim();
                         inWorkspace = section.Equals("Workspace", StringComparison.OrdinalIgnoreCase);
                         inWindow = section.Equals("Window", StringComparison.OrdinalIgnoreCase);
+                        inSettings = section.Equals("Settings", StringComparison.OrdinalIgnoreCase);
                         currentTitle = null;
                         currentSeconds = 0;
                         currentNotes = null;
                         continue;
                     }
 
-                    if (!inWorkspace && !inWindow) continue;
+                    if (!inWorkspace && !inWindow && !inSettings) continue;
 
                     int eq = line.IndexOf('=');
                     if (eq <= 0) continue;
@@ -126,6 +132,14 @@ namespace WorkMode.Configuration
                             cfg.WindowWidth = n;
                         else if (keyName.Equals("Height", StringComparison.OrdinalIgnoreCase) && int.TryParse(value, out n))
                             cfg.WindowHeight = n;
+                        continue;
+                    }
+
+                    if (inSettings)
+                    {
+                        bool b;
+                        if (keyName.Equals("DevMode", StringComparison.OrdinalIgnoreCase) && bool.TryParse(value, out b))
+                            cfg.DevMode = b;
                         continue;
                     }
 
@@ -203,6 +217,10 @@ namespace WorkMode.Configuration
                     sb.AppendLine("Height=" + WindowHeight);
                     sb.AppendLine();
                 }
+
+                sb.AppendLine("[Settings]");
+                sb.AppendLine("DevMode=" + DevMode);
+                sb.AppendLine();
 
                 foreach (Workspace ws in Workspaces)
                 {

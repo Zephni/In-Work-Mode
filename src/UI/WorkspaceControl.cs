@@ -53,6 +53,19 @@ namespace WorkMode.UI
 
         public Workspace Workspace { get { return _workspace; } }
 
+        // Whether the edit icon is shown. Hidden by default; only revealed while
+        // dev mode is switched on.
+        public bool EditButtonVisible
+        {
+            get { return _editButton.Visible; }
+            set
+            {
+                if (_editButton.Visible == value) return;
+                _editButton.Visible = value;
+                LayoutButtons();
+            }
+        }
+
         // Whether this row is currently the selected one (accent border). When
         // selected the notes textarea is revealed beneath the header.
         public bool Selected
@@ -105,7 +118,7 @@ namespace WorkMode.UI
                 Anchor = AnchorStyles.Top | AnchorStyles.Right,
                 ImageAlign = ContentAlignment.MiddleCenter
             };
-            _toggleButton.Click += (s, e) => { OnSelectClick(s, e); var h = ToggleRequested; if (h != null) h(this, EventArgs.Empty); };
+            _toggleButton.Click += (s, e) => { EnsureSelected(); var h = ToggleRequested; if (h != null) h(this, EventArgs.Empty); };
 
             _resetButton = new Button
             {
@@ -115,17 +128,18 @@ namespace WorkMode.UI
                 ImageAlign = ContentAlignment.MiddleCenter
             };
             Theme.StyleButton(_resetButton, Theme.Muted, Theme.MutedHover, Color.White);
-            _resetButton.Click += (s, e) => { OnSelectClick(s, e); var h = ResetRequested; if (h != null) h(this, EventArgs.Empty); };
+            _resetButton.Click += (s, e) => { EnsureSelected(); var h = ResetRequested; if (h != null) h(this, EventArgs.Empty); };
 
             _editButton = new Button
             {
                 Size = new Size(34, 30),
                 Anchor = AnchorStyles.Top | AnchorStyles.Right,
                 Image = Glyphs.Edit(20, Color.White),
-                ImageAlign = ContentAlignment.MiddleCenter
+                ImageAlign = ContentAlignment.MiddleCenter,
+                Visible = false
             };
             Theme.StyleButton(_editButton, Theme.NeutralGray, Theme.NeutralGrayHover, Color.White);
-            _editButton.Click += (s, e) => { OnSelectClick(s, e); var h = EditRequested; if (h != null) h(this, EventArgs.Empty); };
+            _editButton.Click += (s, e) => { EnsureSelected(); var h = EditRequested; if (h != null) h(this, EventArgs.Empty); };
 
             _logTimeButton = new Button
             {
@@ -135,7 +149,7 @@ namespace WorkMode.UI
                 ImageAlign = ContentAlignment.MiddleCenter
             };
             Theme.StyleButton(_logTimeButton, Theme.NeutralGray, Theme.NeutralGrayHover, Color.White);
-            _logTimeButton.Click += (s, e) => { OnSelectClick(s, e); OnLogTimeClicked(s, e); };
+            _logTimeButton.Click += (s, e) => { EnsureSelected(); OnLogTimeClicked(s, e); };
 
             _deleteButton = new Button
             {
@@ -145,7 +159,7 @@ namespace WorkMode.UI
                 ImageAlign = ContentAlignment.MiddleCenter
             };
             Theme.StyleButton(_deleteButton, Theme.NeutralGray, Theme.NeutralGrayHover, Color.White);
-            _deleteButton.Click += (s, e) => { OnSelectClick(s, e); var h = DeleteRequested; if (h != null) h(this, EventArgs.Empty); };
+            _deleteButton.Click += (s, e) => { EnsureSelected(); var h = DeleteRequested; if (h != null) h(this, EventArgs.Empty); };
 
             // Multiline notes area, hidden until the row is selected.
             _notesBox = new TextBox
@@ -255,6 +269,15 @@ namespace WorkMode.UI
             if (h != null) h(this, EventArgs.Empty);
         }
 
+        // Selects this row without toggling it off if it's already selected;
+        // used by the icon buttons so clicking them never deselects the row.
+        private void EnsureSelected()
+        {
+            if (_selected) return;
+            var h = SelectRequested;
+            if (h != null) h(this, EventArgs.Empty);
+        }
+
         private static GraphicsPath RoundedRect(Rectangle r, int radius)
         {
             int d = radius * 2;
@@ -269,12 +292,19 @@ namespace WorkMode.UI
 
         private void LayoutButtons()
         {
-            // Right-to-left: delete, log time, edit, reset, start/stop.
+            // Right-to-left: delete, log time, edit (dev mode only), reset, start/stop.
             int buttonTop = (HeaderHeight - _resetButton.Height) / 2;
             _deleteButton.Location = new Point(Width - _deleteButton.Width - 10, buttonTop);
             _logTimeButton.Location = new Point(_deleteButton.Left - _logTimeButton.Width - 8, buttonTop);
-            _editButton.Location = new Point(_logTimeButton.Left - _editButton.Width - 8, buttonTop);
-            _resetButton.Location = new Point(_editButton.Left - _resetButton.Width - 8, buttonTop);
+
+            int afterLogTime = _logTimeButton.Left;
+            if (_editButton.Visible)
+            {
+                _editButton.Location = new Point(afterLogTime - _editButton.Width - 8, buttonTop);
+                afterLogTime = _editButton.Left;
+            }
+
+            _resetButton.Location = new Point(afterLogTime - _resetButton.Width - 8, buttonTop);
             _toggleButton.Location = new Point(_resetButton.Left - _toggleButton.Width - 8, buttonTop);
 
             int labelWidth = _toggleButton.Left - 22;
@@ -325,10 +355,10 @@ namespace WorkMode.UI
             string current = _notesBox.Text;
             if (string.IsNullOrEmpty(current))
                 _notesBox.Text = line;
-            else if (current.EndsWith("\r\n") || current.EndsWith("\n"))
-                _notesBox.Text = current + line;
+            else if (current.StartsWith("\r\n") || current.StartsWith("\n"))
+                _notesBox.Text = line + current;
             else
-                _notesBox.Text = current + "\r\n" + line;
+                _notesBox.Text = line + "\r\n" + current;
 
             _workspace.Notes = _notesBox.Text;
             var h = NotesChanged;
