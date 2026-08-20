@@ -128,35 +128,6 @@ namespace WorkMode.UI
             return bmp;
         }
 
-        public static Bitmap RestoreWindow(int size, Color color)
-        {
-            Graphics g;
-            var bmp = NewBitmap(size, out g);
-            float stroke = size * 0.09f;
-            float sq = size * 0.56f;
-            var back = new RectangleF(size * 0.34f, size * 0.12f, sq, sq);
-            var front = new RectangleF(size * 0.12f, size * 0.34f, sq, sq);
-
-            using (var pen = new Pen(color, stroke) { LineJoin = LineJoin.Round })
-            {
-                g.DrawRectangle(pen, back.X, back.Y, back.Width, back.Height);
-
-                // Clear where the front square sits so its outline reads cleanly
-                // over the back square instead of showing overlapping strokes.
-                var clearRect = new RectangleF(front.X - stroke, front.Y - stroke,
-                    front.Width + stroke * 2, front.Height + stroke * 2);
-                CompositingMode oldMode = g.CompositingMode;
-                g.CompositingMode = CompositingMode.SourceCopy;
-                using (var clearBrush = new SolidBrush(Color.Transparent))
-                    g.FillRectangle(clearBrush, clearRect);
-                g.CompositingMode = oldMode;
-
-                g.DrawRectangle(pen, front.X, front.Y, front.Width, front.Height);
-            }
-            g.Dispose();
-            return bmp;
-        }
-
         public static Bitmap Trash(int size, Color color)
         {
             Graphics g;

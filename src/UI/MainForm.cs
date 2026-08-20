@@ -24,7 +24,6 @@ namespace WorkMode.UI
         private readonly FlowLayoutPanel _list;
         private readonly Timer _tickTimer;
         private readonly AddWorkspaceRow _addRow;
-        private readonly Label _devModeLabel;
         private readonly HashSet<Keys> _heldKeys = new HashSet<Keys>();
         private WorkspaceControl _selectedRow;
 
@@ -59,57 +58,12 @@ namespace WorkMode.UI
                 BackColor = Theme.Background
             };
 
-            var addPanel = new Panel { Dock = DockStyle.Bottom, Height = 56, BackColor = Theme.Background };
-
-            // Icon-only, backgroundless button that restores the window to its
-            // default size. Dim until hovered so it stays out of the way.
-            var resetSizeButton = new Button
-            {
-                Size = new Size(28, 28),
-                Anchor = AnchorStyles.Top | AnchorStyles.Right,
-                Location = new Point(addPanel.Width - 38, 20),
-                FlatStyle = FlatStyle.Flat,
-                BackColor = Theme.Background,
-                Cursor = Cursors.Hand,
-                Image = Glyphs.RestoreWindow(18, Color.FromArgb(110, Theme.TextMuted)),
-                ImageAlign = ContentAlignment.MiddleCenter,
-                TabStop = false
-            };
-            resetSizeButton.FlatAppearance.BorderSize = 0;
-            resetSizeButton.FlatAppearance.MouseOverBackColor = Theme.Background;
-            resetSizeButton.FlatAppearance.MouseDownBackColor = Theme.Background;
-            resetSizeButton.MouseEnter += (s, e) => resetSizeButton.Image = Glyphs.RestoreWindow(18, Theme.Text);
-            resetSizeButton.MouseLeave += (s, e) => resetSizeButton.Image = Glyphs.RestoreWindow(18, Color.FromArgb(110, Theme.TextMuted));
-            resetSizeButton.Click += OnResetWindowSize;
-            var resetSizeTip = new ToolTip();
-            resetSizeTip.SetToolTip(resetSizeButton, "Restore default window size");
-            addPanel.Controls.Add(resetSizeButton);
-
-            // Greyed-out indicator shown only while the hidden dev mode is on
-            // (see OnKeyDown). Sits just left of the reset-size button.
-            _devModeLabel = new Label
-            {
-                AutoSize = true,
-                Anchor = AnchorStyles.Top | AnchorStyles.Right,
-                Text = "Dev Mode",
-                Font = new Font("Segoe UI", 8f, FontStyle.Regular),
-                ForeColor = Theme.TextMuted,
-                BackColor = Color.Transparent,
-                Visible = _config.DevMode
-            };
-            addPanel.Controls.Add(_devModeLabel);
-            _devModeLabel.Location = new Point(
-                resetSizeButton.Left - _devModeLabel.PreferredWidth - 8,
-                resetSizeButton.Top + (resetSizeButton.Height - _devModeLabel.PreferredHeight) / 2);
-
             Controls.Add(_list);
-            Controls.Add(addPanel);
 
-            // Clicking empty space (the list background, panels or the form) clears
-            // the current selection. Buttons and rows handle their own clicks first.
+            // Clicking empty space (the list background or the form) clears the
+            // current selection. Buttons and rows handle their own clicks first.
             Click += (s, e) => ClearSelection();
             _list.Click += (s, e) => ClearSelection();
-            addPanel.Click += (s, e) => ClearSelection();
 
             foreach (Workspace ws in _config.Workspaces)
                 AddRow(ws);
@@ -156,16 +110,6 @@ namespace WorkMode.UI
             _config.Save();
         }
 
-        // Restores the window to its default size (see DefaultWindowWidth/Height).
-        private void OnResetWindowSize(object sender, EventArgs e)
-        {
-            if (WindowState != FormWindowState.Normal)
-                WindowState = FormWindowState.Normal;
-
-            Size = new Size(DefaultWindowWidth, DefaultWindowHeight);
-            SaveWindowSize();
-        }
-
         // Tracks held-down keys; holding Z+E+P and tapping H toggles dev mode.
         private void OnMainFormKeyDown(object sender, KeyEventArgs e)
         {
@@ -188,7 +132,6 @@ namespace WorkMode.UI
             _config.DevMode = !_config.DevMode;
             _config.Save();
 
-            _devModeLabel.Visible = _config.DevMode;
             foreach (Control c in _list.Controls)
             {
                 var row = c as WorkspaceControl;
