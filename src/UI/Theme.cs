@@ -32,6 +32,10 @@ namespace WorkMode.UI
         public static readonly Color Muted = Color.FromArgb(122, 104, 66);
         public static readonly Color MutedHover = Color.FromArgb(150, 128, 82);
 
+        // Dull grey shared by the Edit, Log time and Delete icon buttons.
+        public static readonly Color NeutralGray = Color.FromArgb(72, 76, 88);
+        public static readonly Color NeutralGrayHover = Color.FromArgb(92, 96, 108);
+
         // Text.
         public static readonly Color Text = Color.FromArgb(233, 236, 239);
         public static readonly Color TextMuted = Color.FromArgb(150, 158, 168);

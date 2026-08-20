@@ -13,12 +13,15 @@ namespace WorkMode.UI
     // second.
     public sealed class MainForm : Form
     {
+        // The window size used on first launch and whenever the user resets it
+        // via the "restore default size" button. Change these to alter both.
+        private const int DefaultWindowWidth = 740;
+        private const int DefaultWindowHeight = 420;
+
         private readonly AppConfig _config;
         private readonly ActivitySimulator _activity;
         private readonly FlowLayoutPanel _list;
         private readonly Timer _tickTimer;
-        private readonly Button _editButton;
-        private readonly Button _deleteButton;
         private WorkspaceControl _selectedRow;
 
         public MainForm(AppConfig config)
@@ -32,8 +35,8 @@ namespace WorkMode.UI
             // sit compactly; the app opens at this minimum unless a size is saved.
             MinimumSize = new Size(360, 170);
 
-            int startWidth = _config.WindowWidth > 0 ? _config.WindowWidth : 640;
-            int startHeight = _config.WindowHeight > 0 ? _config.WindowHeight : 380;
+            int startWidth = _config.WindowWidth > 0 ? _config.WindowWidth : DefaultWindowWidth;
+            int startHeight = _config.WindowHeight > 0 ? _config.WindowHeight : DefaultWindowHeight;
             Size = new Size(startWidth, startHeight);
 
             Theme.ApplyForm(this);
@@ -68,43 +71,29 @@ namespace WorkMode.UI
             addButton.Click += OnAddWorkspace;
             addPanel.Controls.Add(addButton);
 
-            // Edit button: only visible while a workspace row is selected.
-            _editButton = new Button
+            // Icon-only, backgroundless button that restores the window to its
+            // default size. Dim until hovered so it stays out of the way.
+            var resetSizeButton = new Button
             {
-                Text = "Edit",
-                AutoSize = true,
-                AutoSizeMode = AutoSizeMode.GrowAndShrink,
-                MinimumSize = new Size(0, 30),
-                Location = new Point(addButton.Right + 10, 13),
-                Image = Glyphs.Edit(20, Color.White),
-                TextImageRelation = TextImageRelation.ImageBeforeText,
-                ImageAlign = ContentAlignment.MiddleLeft,
-                TextAlign = ContentAlignment.MiddleCenter,
-                Padding = new Padding(6, 0, 12, 0),
-                Visible = false
+                Size = new Size(28, 28),
+                Anchor = AnchorStyles.Top | AnchorStyles.Right,
+                Location = new Point(addPanel.Width - 38, 20),
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Theme.Background,
+                Cursor = Cursors.Hand,
+                Image = Glyphs.RestoreWindow(18, Color.FromArgb(110, Theme.TextMuted)),
+                ImageAlign = ContentAlignment.MiddleCenter,
+                TabStop = false
             };
-            Theme.StyleButton(_editButton, Theme.Blue, Theme.BlueHover, Color.White);
-            _editButton.Click += OnEditWorkspace;
-            addPanel.Controls.Add(_editButton);
-
-            // Delete button: only visible while a workspace row is selected.
-            _deleteButton = new Button
-            {
-                Text = "Delete",
-                AutoSize = true,
-                AutoSizeMode = AutoSizeMode.GrowAndShrink,
-                MinimumSize = new Size(0, 30),
-                Location = new Point(_editButton.Right + 10, 13),
-                Image = Glyphs.Trash(20, Color.White),
-                TextImageRelation = TextImageRelation.ImageBeforeText,
-                ImageAlign = ContentAlignment.MiddleLeft,
-                TextAlign = ContentAlignment.MiddleCenter,
-                Padding = new Padding(6, 0, 12, 0),
-                Visible = false
-            };
-            Theme.StyleButton(_deleteButton, Theme.Danger, Theme.DangerHover, Color.White);
-            _deleteButton.Click += OnDeleteWorkspace;
-            addPanel.Controls.Add(_deleteButton);
+            resetSizeButton.FlatAppearance.BorderSize = 0;
+            resetSizeButton.FlatAppearance.MouseOverBackColor = Theme.Background;
+            resetSizeButton.FlatAppearance.MouseDownBackColor = Theme.Background;
+            resetSizeButton.MouseEnter += (s, e) => resetSizeButton.Image = Glyphs.RestoreWindow(18, Theme.Text);
+            resetSizeButton.MouseLeave += (s, e) => resetSizeButton.Image = Glyphs.RestoreWindow(18, Color.FromArgb(110, Theme.TextMuted));
+            resetSizeButton.Click += OnResetWindowSize;
+            var resetSizeTip = new ToolTip();
+            resetSizeTip.SetToolTip(resetSizeButton, "Restore default window size");
+            addPanel.Controls.Add(resetSizeButton);
 
             Controls.Add(_list);
             Controls.Add(addPanel);
@@ -148,6 +137,16 @@ namespace WorkMode.UI
             _config.Save();
         }
 
+        // Restores the window to its default size (see DefaultWindowWidth/Height).
+        private void OnResetWindowSize(object sender, EventArgs e)
+        {
+            if (WindowState != FormWindowState.Normal)
+                WindowState = FormWindowState.Normal;
+
+            Size = new Size(DefaultWindowWidth, DefaultWindowHeight);
+            SaveWindowSize();
+        }
+
         private void AddRow(Workspace ws)
         {
             var row = new WorkspaceControl(ws);
@@ -155,23 +154,30 @@ namespace WorkMode.UI
             row.ResetRequested += OnReset;
             row.SelectRequested += OnRowSelected;
             row.NotesChanged += OnNotesChanged;
+            row.EditRequested += OnEditWorkspace;
+            row.DeleteRequested += OnDeleteWorkspace;
             _list.Controls.Add(row);
             SizeRow(row);
         }
 
-        // Selects the clicked row, highlighting it and revealing the Edit / Delete buttons.
+        // Selects the clicked row, highlighting it. Clicking an already-selected
+        // row deselects it instead.
         private void OnRowSelected(object sender, EventArgs e)
         {
             var row = sender as WorkspaceControl;
             if (row == null) return;
 
-            if (_selectedRow != null && _selectedRow != row)
+            if (_selectedRow == row)
+            {
+                ClearSelection();
+                return;
+            }
+
+            if (_selectedRow != null)
                 _selectedRow.Selected = false;
 
             _selectedRow = row;
             _selectedRow.Selected = true;
-            _editButton.Visible = true;
-            _deleteButton.Visible = true;
         }
 
         // Persists notes as the user types into a workspace's notes area.
@@ -180,7 +186,7 @@ namespace WorkMode.UI
             _config.Save();
         }
 
-        // Clears any current selection and hides the Edit / Delete buttons.
+        // Clears any current selection.
         private void ClearSelection()
         {
             if (_selectedRow != null)
@@ -188,13 +194,11 @@ namespace WorkMode.UI
                 _selectedRow.Selected = false;
                 _selectedRow = null;
             }
-            _editButton.Visible = false;
-            _deleteButton.Visible = false;
         }
 
         private void OnDeleteWorkspace(object sender, EventArgs e)
         {
-            WorkspaceControl row = _selectedRow;
+            var row = (WorkspaceControl)sender;
             if (row == null) return;
 
             Workspace ws = row.Workspace;
@@ -269,7 +273,7 @@ namespace WorkMode.UI
 
         private void OnEditWorkspace(object sender, EventArgs e)
         {
-            WorkspaceControl row = _selectedRow;
+            var row = (WorkspaceControl)sender;
             if (row == null) return;
 
             Workspace ws = row.Workspace;

@@ -6,8 +6,9 @@ using WorkMode.Models;
 
 namespace WorkMode.UI
 {
-    // A single row in the workspace list: title, time counted, a start/stop
-    // toggle button and an edit button. Rendered as a rounded dark "card".
+    // A single row in the workspace list: title, time counted, and start/stop,
+    // reset, edit, log-time and delete icon buttons. Rendered as a rounded dark
+    // "card".
     public sealed class WorkspaceControl : UserControl
     {
         private const int CornerRadius = 10;
@@ -24,7 +25,9 @@ namespace WorkMode.UI
         private readonly Label _timeLabel;
         private readonly Button _toggleButton;
         private readonly Button _resetButton;
-        private readonly Button _infoButton;
+        private readonly Button _editButton;
+        private readonly Button _logTimeButton;
+        private readonly Button _deleteButton;
         private readonly TextBox _notesBox;
         private readonly Panel _notesGrip;
         private readonly ToolTip _tooltip;
@@ -43,6 +46,10 @@ namespace WorkMode.UI
         public event EventHandler SelectRequested;
         // Raised when the user edits this workspace's notes.
         public event EventHandler NotesChanged;
+        // Raised when the user asks to edit this workspace.
+        public event EventHandler EditRequested;
+        // Raised when the user asks to delete this workspace.
+        public event EventHandler DeleteRequested;
 
         public Workspace Workspace { get { return _workspace; } }
 
@@ -110,15 +117,35 @@ namespace WorkMode.UI
             Theme.StyleButton(_resetButton, Theme.Muted, Theme.MutedHover, Color.White);
             _resetButton.Click += (s, e) => { OnSelectClick(s, e); var h = ResetRequested; if (h != null) h(this, EventArgs.Empty); };
 
-            _infoButton = new Button
+            _editButton = new Button
             {
                 Size = new Size(34, 30),
                 Anchor = AnchorStyles.Top | AnchorStyles.Right,
-                Image = Glyphs.Info(20, Color.White),
+                Image = Glyphs.Edit(20, Color.White),
                 ImageAlign = ContentAlignment.MiddleCenter
             };
-            Theme.StyleButton(_infoButton, Theme.Blue, Theme.BlueHover, Color.White);
-            _infoButton.Click += (s, e) => { OnSelectClick(s, e); OnInfoClicked(s, e); };
+            Theme.StyleButton(_editButton, Theme.NeutralGray, Theme.NeutralGrayHover, Color.White);
+            _editButton.Click += (s, e) => { OnSelectClick(s, e); var h = EditRequested; if (h != null) h(this, EventArgs.Empty); };
+
+            _logTimeButton = new Button
+            {
+                Size = new Size(34, 30),
+                Anchor = AnchorStyles.Top | AnchorStyles.Right,
+                Image = Glyphs.Clock(20, Color.White),
+                ImageAlign = ContentAlignment.MiddleCenter
+            };
+            Theme.StyleButton(_logTimeButton, Theme.NeutralGray, Theme.NeutralGrayHover, Color.White);
+            _logTimeButton.Click += (s, e) => { OnSelectClick(s, e); OnLogTimeClicked(s, e); };
+
+            _deleteButton = new Button
+            {
+                Size = new Size(34, 30),
+                Anchor = AnchorStyles.Top | AnchorStyles.Right,
+                Image = Glyphs.Trash(20, Color.White),
+                ImageAlign = ContentAlignment.MiddleCenter
+            };
+            Theme.StyleButton(_deleteButton, Theme.NeutralGray, Theme.NeutralGrayHover, Color.White);
+            _deleteButton.Click += (s, e) => { OnSelectClick(s, e); var h = DeleteRequested; if (h != null) h(this, EventArgs.Empty); };
 
             // Multiline notes area, hidden until the row is selected.
             _notesBox = new TextBox
@@ -151,14 +178,18 @@ namespace WorkMode.UI
 
             _tooltip = new ToolTip { InitialDelay = 350, ReshowDelay = 200, ShowAlways = true };
             _tooltip.SetToolTip(_resetButton, "Reset");
-            _tooltip.SetToolTip(_infoButton, "Log time");
+            _tooltip.SetToolTip(_editButton, "Edit");
+            _tooltip.SetToolTip(_logTimeButton, "Log time");
+            _tooltip.SetToolTip(_deleteButton, "Delete");
             _tooltip.SetToolTip(_notesGrip, "Drag to resize notes");
 
             Controls.Add(_titleLabel);
             Controls.Add(_timeLabel);
             Controls.Add(_toggleButton);
             Controls.Add(_resetButton);
-            Controls.Add(_infoButton);
+            Controls.Add(_editButton);
+            Controls.Add(_logTimeButton);
+            Controls.Add(_deleteButton);
             Controls.Add(_notesBox);
             Controls.Add(_notesGrip);
 
@@ -238,10 +269,13 @@ namespace WorkMode.UI
 
         private void LayoutButtons()
         {
+            // Right-to-left: delete, log time, edit, reset, start/stop.
             int buttonTop = (HeaderHeight - _resetButton.Height) / 2;
-            _resetButton.Location = new Point(Width - _resetButton.Width - 10, buttonTop);
-            _infoButton.Location = new Point(_resetButton.Left - _infoButton.Width - 8, buttonTop);
-            _toggleButton.Location = new Point(_infoButton.Left - _toggleButton.Width - 8, buttonTop);
+            _deleteButton.Location = new Point(Width - _deleteButton.Width - 10, buttonTop);
+            _logTimeButton.Location = new Point(_deleteButton.Left - _logTimeButton.Width - 8, buttonTop);
+            _editButton.Location = new Point(_logTimeButton.Left - _editButton.Width - 8, buttonTop);
+            _resetButton.Location = new Point(_editButton.Left - _resetButton.Width - 8, buttonTop);
+            _toggleButton.Location = new Point(_resetButton.Left - _toggleButton.Width - 8, buttonTop);
 
             int labelWidth = _toggleButton.Left - 22;
             if (labelWidth < 40) labelWidth = 40;
@@ -284,7 +318,7 @@ namespace WorkMode.UI
             if (h != null) h(this, EventArgs.Empty);
         }
 
-        private void OnInfoClicked(object sender, EventArgs e)
+        private void OnLogTimeClicked(object sender, EventArgs e)
         {
             _workspace.Sync();
             string line = DateTime.Now.ToString("yyyy-MM-dd") + " hours: " + Workspace.Format(_workspace.ElapsedSeconds);
