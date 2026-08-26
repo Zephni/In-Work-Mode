@@ -33,6 +33,11 @@ namespace WorkMode.UI
         private readonly ToolTip _tooltip;
         private bool _selected;
         private bool _hover;
+        // Desired edit-button visibility. Tracked separately from Button.Visible,
+        // whose getter also depends on the whole parent chain (including the not
+        // -yet-shown top-level Form during construction), which would otherwise
+        // make LayoutButtons() miscalculate the gap for it.
+        private bool _editVisible;
         private int _notesHeight = NotesDefaultHeight;
         private bool _resizingNotes;
         private int _resizeStartY;
@@ -57,10 +62,11 @@ namespace WorkMode.UI
         // dev mode is switched on.
         public bool EditButtonVisible
         {
-            get { return _editButton.Visible; }
+            get { return _editVisible; }
             set
             {
-                if (_editButton.Visible == value) return;
+                if (_editVisible == value) return;
+                _editVisible = value;
                 _editButton.Visible = value;
                 LayoutButtons();
             }
@@ -298,7 +304,7 @@ namespace WorkMode.UI
             _logTimeButton.Location = new Point(_deleteButton.Left - _logTimeButton.Width - 8, buttonTop);
 
             int afterLogTime = _logTimeButton.Left;
-            if (_editButton.Visible)
+            if (_editVisible)
             {
                 _editButton.Location = new Point(afterLogTime - _editButton.Width - 8, buttonTop);
                 afterLogTime = _editButton.Left;

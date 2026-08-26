@@ -24,6 +24,7 @@ namespace WorkMode.UI
         private readonly FlowLayoutPanel _list;
         private readonly Timer _tickTimer;
         private readonly AddWorkspaceRow _addRow;
+        private readonly SimulationToggleRow _simToggleRow;
         private readonly HashSet<Keys> _heldKeys = new HashSet<Keys>();
         private WorkspaceControl _selectedRow;
 
@@ -70,10 +71,17 @@ namespace WorkMode.UI
             foreach (Workspace ws in _config.Workspaces)
                 AddRow(ws);
 
-            // Placeholder "card", always the last item, that opens the add dialog.
+            // Placeholder "card", that opens the add dialog.
             _addRow = new AddWorkspaceRow();
             _addRow.AddRequested += OnAddWorkspace;
             _list.Controls.Add(_addRow);
+
+            // Developer-only toggle for the activity simulation, pinned below the
+            // add-workspace card. Hidden unless dev mode is enabled.
+            _simToggleRow = new SimulationToggleRow();
+            _simToggleRow.ToggleRequested += OnToggleSimulation;
+            _simToggleRow.Visible = _config.DevMode;
+            _list.Controls.Add(_simToggleRow);
 
             // Fit each row to the list width.
             _list.Resize += (s, e) => ResizeRows();
@@ -92,8 +100,6 @@ namespace WorkMode.UI
             KeyDown += OnMainFormKeyDown;
             KeyUp += OnMainFormKeyUp;
             Deactivate += (s, e) => _heldKeys.Clear();
-
-            _activity.Start();
         }
 
         // Paint the title bar dark once the native window handle exists.
@@ -139,6 +145,24 @@ namespace WorkMode.UI
                 var row = c as WorkspaceControl;
                 if (row != null) row.EditButtonVisible = _config.DevMode;
             }
+
+            // Reveal / hide the simulation toggle. Leaving dev mode also stops any
+            // running simulation so it can't keep going with no visible control.
+            _simToggleRow.Visible = _config.DevMode;
+            if (!_config.DevMode && _activity.IsRunning)
+            {
+                _activity.Stop();
+                _simToggleRow.Active = false;
+            }
+        }
+
+        // Dev-only: toggles the harmless activity simulation on and off.
+        private void OnToggleSimulation(object sender, EventArgs e)
+        {
+            if (_activity.IsRunning) _activity.Stop();
+            else _activity.Start();
+
+            _simToggleRow.Active = _activity.IsRunning;
         }
 
         private void AddRow(Workspace ws)
@@ -154,9 +178,16 @@ namespace WorkMode.UI
             _list.Controls.Add(row);
             SizeRow(row);
 
-            // Keep the "add new" placeholder pinned to the bottom of the list.
-            if (_addRow != null)
-                _list.Controls.SetChildIndex(_addRow, _list.Controls.Count - 1);
+            PinFooterRows();
+        }
+
+        // Keeps the add-workspace card and the dev-only simulation toggle pinned to
+        // the bottom of the list, in that order.
+        private void PinFooterRows()
+        {
+            if (_addRow == null || _simToggleRow == null) return;
+            _list.Controls.SetChildIndex(_addRow, _list.Controls.Count - 2);
+            _list.Controls.SetChildIndex(_simToggleRow, _list.Controls.Count - 1);
         }
 
         // Selects the clicked row, highlighting it. Clicking an already-selected
