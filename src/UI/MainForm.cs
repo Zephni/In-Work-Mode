@@ -174,6 +174,8 @@ namespace WorkMode.UI
             row.NotesChanged += OnNotesChanged;
             row.EditRequested += OnEditWorkspace;
             row.DeleteRequested += OnDeleteWorkspace;
+            row.ReorderRequested += OnWorkspaceReorderRequested;
+            row.ReorderCompleted += OnWorkspaceReorderCompleted;
             row.EditButtonVisible = _config.DevMode;
             _list.Controls.Add(row);
             SizeRow(row);
@@ -188,6 +190,45 @@ namespace WorkMode.UI
             if (_addRow == null || _simToggleRow == null) return;
             _list.Controls.SetChildIndex(_simToggleRow, _list.Controls.Count - 1);
             _list.Controls.SetChildIndex(_addRow, _list.Controls.Count - 2);
+        }
+
+        private void OnWorkspaceReorderRequested(object sender, EventArgs e)
+        {
+            var draggedRow = sender as WorkspaceControl;
+            if (draggedRow == null || draggedRow.Parent != _list) return;
+
+            Point pointer = _list.PointToClient(Cursor.Position);
+            int currentIndex = _list.Controls.GetChildIndex(draggedRow);
+            int targetIndex = _list.Controls.Count - 2;
+
+            foreach (Control control in _list.Controls)
+            {
+                var row = control as WorkspaceControl;
+                if (row == null || row == draggedRow) continue;
+                if (pointer.Y < row.Top + row.Height / 2)
+                {
+                    targetIndex = _list.Controls.GetChildIndex(row);
+                    break;
+                }
+            }
+
+            if (currentIndex < targetIndex) targetIndex--;
+            if (targetIndex != currentIndex)
+            {
+                _list.Controls.SetChildIndex(draggedRow, targetIndex);
+                PinFooterRows();
+            }
+        }
+
+        private void OnWorkspaceReorderCompleted(object sender, EventArgs e)
+        {
+            _config.Workspaces.Clear();
+            foreach (Control control in _list.Controls)
+            {
+                var row = control as WorkspaceControl;
+                if (row != null) _config.Workspaces.Add(row.Workspace);
+            }
+            _config.Save();
         }
 
         // Selects the clicked row, highlighting it. Clicking an already-selected

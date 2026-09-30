@@ -31,6 +31,7 @@ namespace WorkMode.UI
         private readonly TextBox _notesBox;
         private readonly Panel _notesGrip;
         private readonly ToolTip _tooltip;
+        private readonly Timer _dragHoldTimer;
         private bool _selected;
         private bool _hover;
         // Desired edit-button visibility. Tracked separately from Button.Visible,
@@ -42,6 +43,10 @@ namespace WorkMode.UI
         private bool _resizingNotes;
         private int _resizeStartY;
         private int _resizeStartHeight;
+        private Point _dragStart;
+        private bool _dragPending;
+        private bool _dragReady;
+        private bool _dragging;
 
         // Raised when the user toggles this workspace's timer on or off.
         public event EventHandler ToggleRequested;
@@ -55,6 +60,8 @@ namespace WorkMode.UI
         public event EventHandler EditRequested;
         // Raised when the user asks to delete this workspace.
         public event EventHandler DeleteRequested;
+        public event EventHandler ReorderRequested;
+        public event EventHandler ReorderCompleted;
 
         public Workspace Workspace { get { return _workspace; } }
 
@@ -203,6 +210,9 @@ namespace WorkMode.UI
             _tooltip.SetToolTip(_deleteButton, "Delete");
             _tooltip.SetToolTip(_notesGrip, "Drag to resize notes");
 
+            _dragHoldTimer = new Timer { Interval = 200 };
+            _dragHoldTimer.Tick += OnDragHoldElapsed;
+
             Controls.Add(_titleLabel);
             Controls.Add(_timeLabel);
             Controls.Add(_toggleButton);
@@ -217,6 +227,22 @@ namespace WorkMode.UI
             Click += OnSelectClick;
             _titleLabel.Click += OnSelectClick;
             _timeLabel.Click += OnSelectClick;
+
+            MouseDown += OnDragMouseDown;
+            MouseMove += OnDragMouseMove;
+            MouseUp += OnDragMouseUp;
+            _titleLabel.MouseDown += OnDragMouseDown;
+            _titleLabel.MouseMove += OnDragMouseMove;
+            _titleLabel.MouseUp += OnDragMouseUp;
+            _timeLabel.MouseDown += OnDragMouseDown;
+            _timeLabel.MouseMove += OnDragMouseMove;
+            _timeLabel.MouseUp += OnDragMouseUp;
+            _toggleButton.Cursor = Cursors.Default;
+            _resetButton.Cursor = Cursors.Default;
+            _editButton.Cursor = Cursors.Default;
+            _logTimeButton.Cursor = Cursors.Default;
+            _deleteButton.Cursor = Cursors.Default;
+            _notesBox.Cursor = Cursors.IBeam;
 
             // Track hover across the card and its children so a subtle accent
             // border can hint that the row is clickable.
@@ -273,6 +299,76 @@ namespace WorkMode.UI
         {
             var h = SelectRequested;
             if (h != null) h(this, EventArgs.Empty);
+        }
+
+        private void OnDragMouseDown(object sender, MouseEventArgs e)
+        {
+            if (e.Button != MouseButtons.Left) return;
+            _dragStart = Cursor.Position;
+            _dragPending = true;
+            _dragReady = false;
+            _dragHoldTimer.Start();
+        }
+
+        private void OnDragHoldElapsed(object sender, EventArgs e)
+        {
+            _dragHoldTimer.Stop();
+            if (!_dragPending || (Control.MouseButtons & MouseButtons.Left) == 0)
+            {
+                ResetDragState();
+                return;
+            }
+
+            _dragReady = true;
+            SetDragCursor(true);
+        }
+
+        private void OnDragMouseMove(object sender, MouseEventArgs e)
+        {
+            if (!_dragPending || (Control.MouseButtons & MouseButtons.Left) == 0) return;
+            if (!_dragReady) return;
+
+            if (!_dragging)
+            {
+                Size dragSize = SystemInformation.DragSize;
+                var dragBounds = new Rectangle(
+                    _dragStart.X - dragSize.Width / 2,
+                    _dragStart.Y - dragSize.Height / 2,
+                    dragSize.Width,
+                    dragSize.Height);
+                if (dragBounds.Contains(Cursor.Position)) return;
+                _dragging = true;
+            }
+
+            var h = ReorderRequested;
+            if (h != null) h(this, EventArgs.Empty);
+        }
+
+        private void OnDragMouseUp(object sender, MouseEventArgs e)
+        {
+            bool reordered = _dragging;
+            ResetDragState();
+
+            if (!reordered) return;
+            var h = ReorderCompleted;
+            if (h != null) h(this, EventArgs.Empty);
+        }
+
+        private void ResetDragState()
+        {
+            _dragHoldTimer.Stop();
+            _dragPending = false;
+            _dragReady = false;
+            _dragging = false;
+            SetDragCursor(false);
+        }
+
+        private void SetDragCursor(bool active)
+        {
+            Cursor cursor = active ? Cursors.SizeAll : Cursors.Default;
+            Cursor = cursor;
+            _titleLabel.Cursor = cursor;
+            _timeLabel.Cursor = cursor;
         }
 
         // Selects this row without toggling it off if it's already selected;
@@ -433,7 +529,11 @@ namespace WorkMode.UI
 
         protected override void Dispose(bool disposing)
         {
-            if (disposing && _tooltip != null) _tooltip.Dispose();
+            if (disposing)
+            {
+                if (_tooltip != null) _tooltip.Dispose();
+                if (_dragHoldTimer != null) _dragHoldTimer.Dispose();
+            }
             base.Dispose(disposing);
         }
     }
