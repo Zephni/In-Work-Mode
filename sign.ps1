@@ -1,5 +1,5 @@
 param(
-    [string]$FilePath = (Join-Path $PSScriptRoot 'Work Mode.exe'),
+    [string]$FilePath = (Join-Path $PSScriptRoot 'In Work Mode.exe'),
     [switch]$InstallCertificate
 )
 

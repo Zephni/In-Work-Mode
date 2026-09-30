@@ -1,5 +1,5 @@
 @echo off
-REM Builds "Work Mode.exe" using the C# compiler that ships with Windows (.NET Framework).
+REM Builds "In Work Mode.exe" using the C# compiler that ships with Windows (.NET Framework).
 REM No SDK, no downloads, no runtime install required.
 
 setlocal
@@ -17,7 +17,7 @@ if exist "app.ico" set "ICON=/win32icon:app.ico"
 set "POWERSHELL=%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe"
 where pwsh.exe >nul 2>&1 && set "POWERSHELL=pwsh.exe"
 
-"%CSC%" /nologo /target:winexe /optimize+ /out:"Work Mode.exe" %ICON% ^
+"%CSC%" /nologo /target:winexe /optimize+ /out:"In Work Mode.exe" %ICON% ^
     /reference:System.Windows.Forms.dll ^
     /reference:System.Drawing.dll ^
     /recurse:src\*.cs
@@ -27,12 +27,12 @@ if %ERRORLEVEL% neq 0 (
     exit /b %ERRORLEVEL%
 )
 
-"%POWERSHELL%" -NoProfile -ExecutionPolicy Bypass -File "%~dp0sign.ps1" -FilePath "%~dp0Work Mode.exe"
+"%POWERSHELL%" -NoProfile -ExecutionPolicy Bypass -File "%~dp0sign.ps1" -FilePath "%~dp0In Work Mode.exe"
 if %ERRORLEVEL% neq 0 (
     echo Signing FAILED.
     echo Run: powershell -ExecutionPolicy Bypass -File .\sign.ps1 -InstallCertificate
     exit /b %ERRORLEVEL%
 )
 
-echo Build and signing succeeded: Work Mode.exe
+echo Build and signing succeeded: In Work Mode.exe
 endlocal

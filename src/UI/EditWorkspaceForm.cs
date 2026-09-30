@@ -126,7 +126,7 @@ namespace WorkMode.UI
             string title = _titleBox.Text.Trim();
             if (title.Length == 0)
             {
-                MessageBox.Show(this, "Please enter a title.", "Work Mode",
+                MessageBox.Show(this, "Please enter a title.", "In Work Mode",
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 DialogResult = DialogResult.None;
                 return;
@@ -135,7 +135,7 @@ namespace WorkMode.UI
             long seconds;
             if (!Workspace.TryParseTime(_timeBox.Text, out seconds))
             {
-                MessageBox.Show(this, "Please enter the time as HH:MM:SS.", "Work Mode",
+                MessageBox.Show(this, "Please enter the time as HH:MM:SS.", "In Work Mode",
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 DialogResult = DialogResult.None;
                 return;

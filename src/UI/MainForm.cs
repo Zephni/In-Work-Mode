@@ -33,7 +33,7 @@ namespace WorkMode.UI
             _config = config ?? new AppConfig();
             _activity = new ActivitySimulator();
 
-            Text = "Work Mode";
+            Text = "In Work Mode";
             StartPosition = FormStartPosition.CenterScreen;
             // Minimum height is roughly half the old 300px floor so the window can
             // sit compactly; the app opens at this minimum unless a size is saved.
