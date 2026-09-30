@@ -186,8 +186,8 @@ namespace WorkMode.UI
         private void PinFooterRows()
         {
             if (_addRow == null || _simToggleRow == null) return;
-            _list.Controls.SetChildIndex(_addRow, _list.Controls.Count - 2);
             _list.Controls.SetChildIndex(_simToggleRow, _list.Controls.Count - 1);
+            _list.Controls.SetChildIndex(_addRow, _list.Controls.Count - 2);
         }
 
         // Selects the clicked row, highlighting it. Clicking an already-selected
