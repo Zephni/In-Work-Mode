@@ -27,7 +27,7 @@ namespace WorkMode.Configuration
         public int WindowHeight { get; set; }
 
         // Hidden developer mode, toggled via a secret key combo (see MainForm).
-        // Reveals the per-workspace edit button when enabled.
+        // Reveals the activity simulation controls when enabled.
         public bool DevMode { get; set; }
 
         public AppConfig()

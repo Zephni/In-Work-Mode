@@ -89,8 +89,8 @@ namespace WorkMode.UI
             ResizeEnd += (s, e) => SaveWindowSize();
             FormClosing += (s, e) => Cleanup();
 
-            // Secret combo: hold Z, E, P and tap H to toggle dev mode (reveals
-            // the per-workspace edit button). Only tracked while focused.
+            // Secret combo: hold Z, E, P and tap H to toggle dev mode.
+            // Only tracked while focused.
             KeyPreview = true;
             KeyDown += OnMainFormKeyDown;
             KeyUp += OnMainFormKeyUp;
@@ -129,17 +129,11 @@ namespace WorkMode.UI
             _heldKeys.Remove(e.KeyCode);
         }
 
-        // Flips dev mode, persists it, and shows/hides the edit button on every row.
+        // Flips dev mode, persists it, and shows/hides the simulation toggle.
         private void ToggleDevMode()
         {
             _config.DevMode = !_config.DevMode;
             _config.Save();
-
-            foreach (Control c in _list.Controls)
-            {
-                var row = c as WorkspaceControl;
-                if (row != null) row.EditButtonVisible = _config.DevMode;
-            }
 
             // Reveal / hide the simulation toggle. Leaving dev mode also stops any
             // running simulation so it can't keep going with no visible control.
@@ -170,7 +164,6 @@ namespace WorkMode.UI
             row.DeleteRequested += OnDeleteWorkspace;
             row.ReorderRequested += OnWorkspaceReorderRequested;
             row.ReorderCompleted += OnWorkspaceReorderCompleted;
-            row.EditButtonVisible = _config.DevMode;
             _list.Controls.Add(row);
             SizeRow(row);
 

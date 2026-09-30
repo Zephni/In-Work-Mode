@@ -23,11 +23,6 @@ namespace WorkMode.UI
         private readonly ToolTip _tooltip;
         private readonly Timer _dragHoldTimer;
         private bool _hover;
-        // Desired edit-button visibility. Tracked separately from Button.Visible,
-        // whose getter also depends on the whole parent chain (including the not
-        // -yet-shown top-level Form during construction), which would otherwise
-        // make LayoutButtons() miscalculate the gap for it.
-        private bool _editVisible;
         private Point _dragStart;
         private Point _dragPreviewOffset;
         private bool _dragPending;
@@ -49,20 +44,6 @@ namespace WorkMode.UI
         public event EventHandler ReorderCompleted;
 
         public Workspace Workspace { get { return _workspace; } }
-
-        // Whether the edit icon is shown. Hidden by default; only revealed while
-        // dev mode is switched on.
-        public bool EditButtonVisible
-        {
-            get { return _editVisible; }
-            set
-            {
-                if (_editVisible == value) return;
-                _editVisible = value;
-                _editButton.Visible = value;
-                LayoutButtons();
-            }
-        }
 
         public WorkspaceControl(Workspace workspace)
         {
@@ -116,8 +97,7 @@ namespace WorkMode.UI
             {
                 Size = new Size(34, 30),
                 Image = Glyphs.Edit(20, Color.White),
-                ImageAlign = ContentAlignment.MiddleCenter,
-                Visible = false
+                ImageAlign = ContentAlignment.MiddleCenter
             };
             Theme.StyleButton(_editButton, Theme.NeutralGray, Theme.NeutralGrayHover, Color.White);
             _editButton.Click += (s, e) => { var h = EditRequested; if (h != null) h(this, EventArgs.Empty); };
@@ -389,20 +369,13 @@ namespace WorkMode.UI
 
         private void LayoutButtons()
         {
-            // Left-to-right: start/stop, edit (dev mode only), reset, notes, delete.
+            // Left-to-right: start/stop, edit, reset, notes, delete.
             int buttonTop = (HeaderHeight - _resetButton.Height) / 2;
             _deleteButton.Location = new Point(Width - _deleteButton.Width - 10, buttonTop);
             _notesButton.Location = new Point(_deleteButton.Left - _notesButton.Width - 8, buttonTop);
             _resetButton.Location = new Point(_notesButton.Left - _resetButton.Width - 8, buttonTop);
-
-            int beforeReset = _resetButton.Left;
-            if (_editVisible)
-            {
-                _editButton.Location = new Point(beforeReset - _editButton.Width - 8, buttonTop);
-                beforeReset = _editButton.Left;
-            }
-
-            _toggleButton.Location = new Point(beforeReset - _toggleButton.Width - 8, buttonTop);
+            _editButton.Location = new Point(_resetButton.Left - _editButton.Width - 8, buttonTop);
+            _toggleButton.Location = new Point(_editButton.Left - _toggleButton.Width - 8, buttonTop);
 
             int labelWidth = _toggleButton.Left - 22;
             if (labelWidth < 40) labelWidth = 40;
