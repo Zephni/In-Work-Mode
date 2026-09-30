@@ -29,9 +29,11 @@ namespace WorkMode.UI
         // make LayoutButtons() miscalculate the gap for it.
         private bool _editVisible;
         private Point _dragStart;
+        private Point _dragPreviewOffset;
         private bool _dragPending;
         private bool _dragReady;
         private bool _dragging;
+        private DragPreviewForm _dragPreview;
 
         // Raised when the user toggles this workspace's timer on or off.
         public event EventHandler ToggleRequested;
@@ -222,6 +224,8 @@ namespace WorkMode.UI
         {
             if (e.Button != MouseButtons.Left) return;
             _dragStart = Cursor.Position;
+            Point rowOrigin = PointToScreen(Point.Empty);
+            _dragPreviewOffset = new Point(_dragStart.X - rowOrigin.X, _dragStart.Y - rowOrigin.Y);
             _dragPending = true;
             _dragReady = false;
             _dragHoldTimer.Start();
@@ -237,6 +241,7 @@ namespace WorkMode.UI
             }
 
             _dragReady = true;
+            ShowDragPreview();
             SetDragCursor(true);
             Invalidate();
         }
@@ -245,6 +250,8 @@ namespace WorkMode.UI
         {
             if (!_dragPending || (Control.MouseButtons & MouseButtons.Left) == 0) return;
             if (!_dragReady) return;
+
+            PositionDragPreview();
 
             if (!_dragging)
             {
@@ -275,6 +282,12 @@ namespace WorkMode.UI
         private void ResetDragState()
         {
             _dragHoldTimer.Stop();
+            if (_dragPreview != null)
+            {
+                _dragPreview.Close();
+                _dragPreview.Dispose();
+                _dragPreview = null;
+            }
             _dragPending = false;
             _dragReady = false;
             _dragging = false;
@@ -288,6 +301,78 @@ namespace WorkMode.UI
             Cursor = cursor;
             _titleLabel.Cursor = cursor;
             _timeLabel.Cursor = cursor;
+        }
+
+        private void ShowDragPreview()
+        {
+            var snapshot = new Bitmap(Width, Height);
+            DrawToBitmap(snapshot, ClientRectangle);
+            _dragPreview = new DragPreviewForm(snapshot);
+            PositionDragPreview();
+            _dragPreview.Show(this);
+        }
+
+        private void PositionDragPreview()
+        {
+            if (_dragPreview == null) return;
+            Point pointer = Cursor.Position;
+            _dragPreview.Location = new Point(
+                pointer.X - _dragPreviewOffset.X,
+                pointer.Y - _dragPreviewOffset.Y);
+        }
+
+        private sealed class DragPreviewForm : Form
+        {
+            private const int WsExTransparent = 0x20;
+            private const int WsExToolWindow = 0x80;
+            private const int WsExNoActivate = 0x08000000;
+            private const int WmNcHitTest = 0x0084;
+            private const int HtTransparent = -1;
+            private readonly Bitmap _snapshot;
+
+            public DragPreviewForm(Bitmap snapshot)
+            {
+                _snapshot = snapshot;
+                FormBorderStyle = FormBorderStyle.None;
+                ShowInTaskbar = false;
+                StartPosition = FormStartPosition.Manual;
+                Size = snapshot.Size;
+                Opacity = 0.3;
+            }
+
+            protected override bool ShowWithoutActivation { get { return true; } }
+
+            protected override CreateParams CreateParams
+            {
+                get
+                {
+                    CreateParams parameters = base.CreateParams;
+                    parameters.ExStyle |= WsExTransparent | WsExToolWindow | WsExNoActivate;
+                    return parameters;
+                }
+            }
+
+            protected override void OnPaint(PaintEventArgs e)
+            {
+                e.Graphics.DrawImageUnscaled(_snapshot, Point.Empty);
+            }
+
+            protected override void WndProc(ref Message message)
+            {
+                if (message.Msg == WmNcHitTest)
+                {
+                    message.Result = new IntPtr(HtTransparent);
+                    return;
+                }
+
+                base.WndProc(ref message);
+            }
+
+            protected override void Dispose(bool disposing)
+            {
+                if (disposing) _snapshot.Dispose();
+                base.Dispose(disposing);
+            }
         }
 
         private static GraphicsPath RoundedRect(Rectangle r, int radius)
