@@ -26,6 +26,7 @@ namespace WorkMode.UI
         private readonly AddWorkspaceRow _addRow;
         private readonly SimulationToggleRow _simToggleRow;
         private readonly HashSet<Keys> _heldKeys = new HashSet<Keys>();
+        private bool _resizeRowsPending;
 
         public MainForm(AppConfig config)
         {
@@ -78,7 +79,7 @@ namespace WorkMode.UI
             _list.Controls.Add(_simToggleRow);
 
             // Fit each row to the list width.
-            _list.Resize += (s, e) => ResizeRows();
+            _list.Resize += (s, e) => QueueResizeRows();
             ResizeRows();
 
             _tickTimer = new Timer { Interval = 1000 };
@@ -250,6 +251,18 @@ namespace WorkMode.UI
         {
             foreach (Control row in _list.Controls)
                 SizeRow(row);
+        }
+
+        private void QueueResizeRows()
+        {
+            if (_resizeRowsPending || !_list.IsHandleCreated) return;
+            _resizeRowsPending = true;
+            _list.BeginInvoke((Action)(() =>
+            {
+                _resizeRowsPending = false;
+                if (_list.IsDisposed) return;
+                ResizeRows();
+            }));
         }
 
         private void SizeRow(Control row)

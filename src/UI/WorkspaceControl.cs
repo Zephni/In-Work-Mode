@@ -97,7 +97,6 @@ namespace WorkMode.UI
             _toggleButton = new Button
             {
                 Size = new Size(34, 30),
-                Anchor = AnchorStyles.Top | AnchorStyles.Right,
                 ImageAlign = ContentAlignment.MiddleCenter
             };
             _toggleButton.Click += (s, e) => { var h = ToggleRequested; if (h != null) h(this, EventArgs.Empty); };
@@ -105,7 +104,6 @@ namespace WorkMode.UI
             _resetButton = new Button
             {
                 Size = new Size(34, 30),
-                Anchor = AnchorStyles.Top | AnchorStyles.Right,
                 Image = Glyphs.Reset(20, Color.White),
                 ImageAlign = ContentAlignment.MiddleCenter
             };
@@ -115,7 +113,6 @@ namespace WorkMode.UI
             _editButton = new Button
             {
                 Size = new Size(34, 30),
-                Anchor = AnchorStyles.Top | AnchorStyles.Right,
                 Image = Glyphs.Edit(20, Color.White),
                 ImageAlign = ContentAlignment.MiddleCenter,
                 Visible = false
@@ -126,7 +123,6 @@ namespace WorkMode.UI
             _notesButton = new Button
             {
                 Size = new Size(34, 30),
-                Anchor = AnchorStyles.Top | AnchorStyles.Right,
                 Image = Glyphs.Notes(20, Color.White),
                 ImageAlign = ContentAlignment.MiddleCenter
             };
@@ -136,7 +132,6 @@ namespace WorkMode.UI
             _deleteButton = new Button
             {
                 Size = new Size(34, 30),
-                Anchor = AnchorStyles.Top | AnchorStyles.Right,
                 Image = Glyphs.Trash(20, Color.White),
                 ImageAlign = ContentAlignment.MiddleCenter
             };
@@ -149,7 +144,7 @@ namespace WorkMode.UI
             _tooltip.SetToolTip(_notesButton, "Notes");
             _tooltip.SetToolTip(_deleteButton, "Delete");
 
-            _dragHoldTimer = new Timer { Interval = 200 };
+            _dragHoldTimer = new Timer { Interval = 50 };
             _dragHoldTimer.Tick += OnDragHoldElapsed;
 
             Controls.Add(_titleLabel);
