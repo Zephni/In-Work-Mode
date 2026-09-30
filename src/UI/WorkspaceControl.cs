@@ -6,43 +6,28 @@ using WorkMode.Models;
 
 namespace WorkMode.UI
 {
-    // A single row in the workspace list: title, time counted, and start/stop,
-    // reset, edit, log-time and delete icon buttons. Rendered as a rounded dark
-    // "card".
+    // A single row in the workspace list: title, time counted, and action buttons.
+    // Rendered as a rounded dark "card".
     public sealed class WorkspaceControl : UserControl
     {
         private const int CornerRadius = 10;
         private const int HeaderHeight = 56;
-        private const int NotesDefaultHeight = 80;
-        private const int NotesMinHeight = 40;
-        private const int NotesMaxHeight = 400;
-        private const int GripHeight = 10;
-        private const int NotesSidePadding = 12;
-        private const int NotesBottomPadding = 8;
-
         private readonly Workspace _workspace;
         private readonly Label _titleLabel;
         private readonly Label _timeLabel;
         private readonly Button _toggleButton;
         private readonly Button _resetButton;
         private readonly Button _editButton;
-        private readonly Button _logTimeButton;
+        private readonly Button _notesButton;
         private readonly Button _deleteButton;
-        private readonly TextBox _notesBox;
-        private readonly Panel _notesGrip;
         private readonly ToolTip _tooltip;
         private readonly Timer _dragHoldTimer;
-        private bool _selected;
         private bool _hover;
         // Desired edit-button visibility. Tracked separately from Button.Visible,
         // whose getter also depends on the whole parent chain (including the not
         // -yet-shown top-level Form during construction), which would otherwise
         // make LayoutButtons() miscalculate the gap for it.
         private bool _editVisible;
-        private int _notesHeight = NotesDefaultHeight;
-        private bool _resizingNotes;
-        private int _resizeStartY;
-        private int _resizeStartHeight;
         private Point _dragStart;
         private bool _dragPending;
         private bool _dragReady;
@@ -52,8 +37,6 @@ namespace WorkMode.UI
         public event EventHandler ToggleRequested;
         // Raised when the user asks to reset this workspace's counted time.
         public event EventHandler ResetRequested;
-        // Raised when the user clicks the row to select it.
-        public event EventHandler SelectRequested;
         // Raised when the user edits this workspace's notes.
         public event EventHandler NotesChanged;
         // Raised when the user asks to edit this workspace.
@@ -76,20 +59,6 @@ namespace WorkMode.UI
                 _editVisible = value;
                 _editButton.Visible = value;
                 LayoutButtons();
-            }
-        }
-
-        // Whether this row is currently the selected one (accent border). When
-        // selected the notes textarea is revealed beneath the header.
-        public bool Selected
-        {
-            get { return _selected; }
-            set
-            {
-                if (_selected == value) return;
-                _selected = value;
-                UpdateNotesVisibility();
-                Invalidate();
             }
         }
 
@@ -131,7 +100,7 @@ namespace WorkMode.UI
                 Anchor = AnchorStyles.Top | AnchorStyles.Right,
                 ImageAlign = ContentAlignment.MiddleCenter
             };
-            _toggleButton.Click += (s, e) => { EnsureSelected(); var h = ToggleRequested; if (h != null) h(this, EventArgs.Empty); };
+            _toggleButton.Click += (s, e) => { var h = ToggleRequested; if (h != null) h(this, EventArgs.Empty); };
 
             _resetButton = new Button
             {
@@ -140,8 +109,8 @@ namespace WorkMode.UI
                 Image = Glyphs.Reset(20, Color.White),
                 ImageAlign = ContentAlignment.MiddleCenter
             };
-            Theme.StyleButton(_resetButton, Theme.Muted, Theme.MutedHover, Color.White);
-            _resetButton.Click += (s, e) => { EnsureSelected(); var h = ResetRequested; if (h != null) h(this, EventArgs.Empty); };
+            Theme.StyleButton(_resetButton, Theme.NeutralGray, Theme.NeutralGrayHover, Color.White);
+            _resetButton.Click += (s, e) => { var h = ResetRequested; if (h != null) h(this, EventArgs.Empty); };
 
             _editButton = new Button
             {
@@ -152,17 +121,17 @@ namespace WorkMode.UI
                 Visible = false
             };
             Theme.StyleButton(_editButton, Theme.NeutralGray, Theme.NeutralGrayHover, Color.White);
-            _editButton.Click += (s, e) => { EnsureSelected(); var h = EditRequested; if (h != null) h(this, EventArgs.Empty); };
+            _editButton.Click += (s, e) => { var h = EditRequested; if (h != null) h(this, EventArgs.Empty); };
 
-            _logTimeButton = new Button
+            _notesButton = new Button
             {
                 Size = new Size(34, 30),
                 Anchor = AnchorStyles.Top | AnchorStyles.Right,
-                Image = Glyphs.Clock(20, Color.White),
+                Image = Glyphs.Notes(20, Color.White),
                 ImageAlign = ContentAlignment.MiddleCenter
             };
-            Theme.StyleButton(_logTimeButton, Theme.NeutralGray, Theme.NeutralGrayHover, Color.White);
-            _logTimeButton.Click += (s, e) => { EnsureSelected(); OnLogTimeClicked(s, e); };
+            Theme.StyleButton(_notesButton, Theme.NeutralGray, Theme.NeutralGrayHover, Color.White);
+            _notesButton.Click += OnNotesClicked;
 
             _deleteButton = new Button
             {
@@ -172,43 +141,13 @@ namespace WorkMode.UI
                 ImageAlign = ContentAlignment.MiddleCenter
             };
             Theme.StyleButton(_deleteButton, Theme.NeutralGray, Theme.NeutralGrayHover, Color.White);
-            _deleteButton.Click += (s, e) => { EnsureSelected(); var h = DeleteRequested; if (h != null) h(this, EventArgs.Empty); };
-
-            // Multiline notes area, hidden until the row is selected.
-            _notesBox = new TextBox
-            {
-                Multiline = true,
-                ScrollBars = ScrollBars.Vertical,
-                BorderStyle = BorderStyle.FixedSingle,
-                BackColor = Theme.SurfaceAlt,
-                ForeColor = Theme.Text,
-                Font = new Font("Segoe UI Semibold", 9.5f, FontStyle.Regular),
-                WordWrap = true,
-                Visible = false,
-                Text = _workspace.Notes ?? string.Empty
-            };
-            _notesBox.KeyUp += OnNotesKeyUp;
-            _notesBox.HandleCreated += (s, e) => ApplyNotesPadding();
-
-            // A slim drag handle beneath the notes box for resizing its height.
-            _notesGrip = new Panel
-            {
-                Height = GripHeight,
-                BackColor = Theme.Surface,
-                Cursor = Cursors.SizeNS,
-                Visible = false
-            };
-            _notesGrip.MouseDown += OnGripMouseDown;
-            _notesGrip.MouseMove += OnGripMouseMove;
-            _notesGrip.MouseUp += OnGripMouseUp;
-            _notesGrip.Paint += OnGripPaint;
+            _deleteButton.Click += (s, e) => { var h = DeleteRequested; if (h != null) h(this, EventArgs.Empty); };
 
             _tooltip = new ToolTip { InitialDelay = 350, ReshowDelay = 200, ShowAlways = true };
             _tooltip.SetToolTip(_resetButton, "Reset");
             _tooltip.SetToolTip(_editButton, "Edit");
-            _tooltip.SetToolTip(_logTimeButton, "Log time");
+            _tooltip.SetToolTip(_notesButton, "Notes");
             _tooltip.SetToolTip(_deleteButton, "Delete");
-            _tooltip.SetToolTip(_notesGrip, "Drag to resize notes");
 
             _dragHoldTimer = new Timer { Interval = 200 };
             _dragHoldTimer.Tick += OnDragHoldElapsed;
@@ -218,15 +157,8 @@ namespace WorkMode.UI
             Controls.Add(_toggleButton);
             Controls.Add(_resetButton);
             Controls.Add(_editButton);
-            Controls.Add(_logTimeButton);
+            Controls.Add(_notesButton);
             Controls.Add(_deleteButton);
-            Controls.Add(_notesBox);
-            Controls.Add(_notesGrip);
-
-            // Clicking the card body (anywhere that isn't a button) selects the row.
-            Click += OnSelectClick;
-            _titleLabel.Click += OnSelectClick;
-            _timeLabel.Click += OnSelectClick;
 
             MouseDown += OnDragMouseDown;
             MouseMove += OnDragMouseMove;
@@ -240,9 +172,8 @@ namespace WorkMode.UI
             _toggleButton.Cursor = Cursors.Default;
             _resetButton.Cursor = Cursors.Default;
             _editButton.Cursor = Cursors.Default;
-            _logTimeButton.Cursor = Cursors.Default;
+            _notesButton.Cursor = Cursors.Default;
             _deleteButton.Cursor = Cursors.Default;
-            _notesBox.Cursor = Cursors.IBeam;
 
             // Track hover across the card and its children so a subtle accent
             // border can hint that the row is clickable.
@@ -254,9 +185,8 @@ namespace WorkMode.UI
                 child.MouseLeave += OnHoverChanged;
             }
 
-            Resize += (s, e) => { LayoutButtons(); LayoutNotes(); };
+            Resize += (s, e) => LayoutButtons();
             LayoutButtons();
-            LayoutNotes();
             Refresh();
         }
 
@@ -266,9 +196,7 @@ namespace WorkMode.UI
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
             e.Graphics.Clear(Theme.Background);
 
-            // Inset by one pixel when selected so the thicker accent border isn't
-            // clipped at the control edges.
-            int inset = _selected ? 1 : 0;
+            int inset = _dragReady ? 1 : 0;
             var rect = new Rectangle(inset, inset, Width - 1 - inset * 2, Height - 1 - inset * 2);
             using (var path = RoundedRect(rect, CornerRadius))
             using (var fill = new SolidBrush(Theme.Surface))
@@ -279,12 +207,12 @@ namespace WorkMode.UI
             }
         }
 
-        // Selected: solid accent. Hovered: faint accent hint. Otherwise: plain border.
+        // Holding the row reveals drag readiness; hover remains a lighter hint.
         private Pen BorderPen()
         {
-            if (_selected) return new Pen(Theme.Accent, 2f);
-            if (_hover) return new Pen(Color.FromArgb(90, Theme.Accent));
-            return new Pen(Theme.Border);
+            if (_dragReady) return new Pen(Color.FromArgb(180, Theme.BlueHover), 1.5f);
+            if (_hover) return new Pen(Color.FromArgb(190, Theme.WorkspaceBorder));
+            return new Pen(Theme.WorkspaceBorder);
         }
 
         private void OnHoverChanged(object sender, EventArgs e)
@@ -293,12 +221,6 @@ namespace WorkMode.UI
             if (_hover == hovering) return;
             _hover = hovering;
             Invalidate();
-        }
-
-        private void OnSelectClick(object sender, EventArgs e)
-        {
-            var h = SelectRequested;
-            if (h != null) h(this, EventArgs.Empty);
         }
 
         private void OnDragMouseDown(object sender, MouseEventArgs e)
@@ -321,6 +243,7 @@ namespace WorkMode.UI
 
             _dragReady = true;
             SetDragCursor(true);
+            Invalidate();
         }
 
         private void OnDragMouseMove(object sender, MouseEventArgs e)
@@ -361,6 +284,7 @@ namespace WorkMode.UI
             _dragReady = false;
             _dragging = false;
             SetDragCursor(false);
+            Invalidate();
         }
 
         private void SetDragCursor(bool active)
@@ -369,15 +293,6 @@ namespace WorkMode.UI
             Cursor = cursor;
             _titleLabel.Cursor = cursor;
             _timeLabel.Cursor = cursor;
-        }
-
-        // Selects this row without toggling it off if it's already selected;
-        // used by the icon buttons so clicking them never deselects the row.
-        private void EnsureSelected()
-        {
-            if (_selected) return;
-            var h = SelectRequested;
-            if (h != null) h(this, EventArgs.Empty);
         }
 
         private static GraphicsPath RoundedRect(Rectangle r, int radius)
@@ -394,20 +309,20 @@ namespace WorkMode.UI
 
         private void LayoutButtons()
         {
-            // Right-to-left: delete, log time, edit (dev mode only), reset, start/stop.
+            // Left-to-right: start/stop, edit (dev mode only), reset, notes, delete.
             int buttonTop = (HeaderHeight - _resetButton.Height) / 2;
             _deleteButton.Location = new Point(Width - _deleteButton.Width - 10, buttonTop);
-            _logTimeButton.Location = new Point(_deleteButton.Left - _logTimeButton.Width - 8, buttonTop);
+            _notesButton.Location = new Point(_deleteButton.Left - _notesButton.Width - 8, buttonTop);
+            _resetButton.Location = new Point(_notesButton.Left - _resetButton.Width - 8, buttonTop);
 
-            int afterLogTime = _logTimeButton.Left;
+            int beforeReset = _resetButton.Left;
             if (_editVisible)
             {
-                _editButton.Location = new Point(afterLogTime - _editButton.Width - 8, buttonTop);
-                afterLogTime = _editButton.Left;
+                _editButton.Location = new Point(beforeReset - _editButton.Width - 8, buttonTop);
+                beforeReset = _editButton.Left;
             }
 
-            _resetButton.Location = new Point(afterLogTime - _resetButton.Width - 8, buttonTop);
-            _toggleButton.Location = new Point(_resetButton.Left - _toggleButton.Width - 8, buttonTop);
+            _toggleButton.Location = new Point(beforeReset - _toggleButton.Width - 8, buttonTop);
 
             int labelWidth = _toggleButton.Left - 22;
             if (labelWidth < 40) labelWidth = 40;
@@ -415,93 +330,16 @@ namespace WorkMode.UI
             _timeLabel.Width = labelWidth;
         }
 
-        // Positions the notes box and its resize grip below the header.
-        private void LayoutNotes()
+        private void OnNotesClicked(object sender, EventArgs e)
         {
-            int width = Width - NotesSidePadding * 2;
-            if (width < 40) width = 40;
-            _notesBox.SetBounds(NotesSidePadding, HeaderHeight, width, _notesHeight);
-            _notesGrip.SetBounds(NotesSidePadding, HeaderHeight + _notesHeight, width, GripHeight);
-            ApplyNotesPadding();
-        }
-
-        // Shows or hides the notes area and grows/shrinks the card to fit.
-        private void UpdateNotesVisibility()
-        {
-            _notesBox.Visible = _selected;
-            _notesGrip.Visible = _selected;
-            Height = _selected
-                ? HeaderHeight + _notesHeight + GripHeight + NotesBottomPadding
-                : HeaderHeight;
-            LayoutNotes();
-        }
-
-        private void ApplyNotesPadding()
-        {
-            if (!_notesBox.IsHandleCreated) return;
-            Interop.NativeMethods.SetTextBoxPadding(
-                _notesBox.Handle, 5, 4, _notesBox.Width, _notesBox.Height);
-        }
-
-        private void OnNotesKeyUp(object sender, KeyEventArgs e)
-        {
-            _workspace.Notes = _notesBox.Text;
-            var h = NotesChanged;
-            if (h != null) h(this, EventArgs.Empty);
-        }
-
-        private void OnLogTimeClicked(object sender, EventArgs e)
-        {
-            _workspace.Sync();
-            string line = DateTime.Now.ToString("yyyy-MM-dd") + " hours: " + Workspace.Format(_workspace.ElapsedSeconds);
-            string current = _notesBox.Text;
-            if (string.IsNullOrEmpty(current))
-                _notesBox.Text = line;
-            else if (current.StartsWith("\r\n") || current.StartsWith("\n"))
-                _notesBox.Text = line + current;
-            else
-                _notesBox.Text = line + "\r\n" + current;
-
-            _workspace.Notes = _notesBox.Text;
-            var h = NotesChanged;
-            if (h != null) h(this, EventArgs.Empty);
-        }
-
-        private void OnGripMouseDown(object sender, MouseEventArgs e)
-        {
-            _resizingNotes = true;
-            _resizeStartY = Cursor.Position.Y;
-            _resizeStartHeight = _notesHeight;
-        }
-
-        private void OnGripMouseMove(object sender, MouseEventArgs e)
-        {
-            if (!_resizingNotes) return;
-            int height = _resizeStartHeight + (Cursor.Position.Y - _resizeStartY);
-            if (height < NotesMinHeight) height = NotesMinHeight;
-            if (height > NotesMaxHeight) height = NotesMaxHeight;
-            if (height == _notesHeight) return;
-
-            _notesHeight = height;
-            Height = HeaderHeight + _notesHeight + GripHeight + NotesBottomPadding;
-            LayoutNotes();
-        }
-
-        private void OnGripMouseUp(object sender, MouseEventArgs e)
-        {
-            _resizingNotes = false;
-        }
-
-        // Draws a subtle two-line grab handle centred in the grip.
-        private void OnGripPaint(object sender, PaintEventArgs e)
-        {
-            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            int cx = _notesGrip.Width / 2;
-            int cy = _notesGrip.Height / 2;
-            using (var pen = new Pen(Theme.TextMuted, 1.4f))
+            using (var dialog = new NotesForm(_workspace))
             {
-                e.Graphics.DrawLine(pen, cx - 12, cy - 2, cx + 12, cy - 2);
-                e.Graphics.DrawLine(pen, cx - 12, cy + 2, cx + 12, cy + 2);
+                dialog.NotesChanged += (s, args) =>
+                {
+                    var h = NotesChanged;
+                    if (h != null) h(this, EventArgs.Empty);
+                };
+                dialog.ShowDialog(FindForm());
             }
         }
 

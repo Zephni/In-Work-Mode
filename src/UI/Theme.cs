@@ -13,6 +13,7 @@ namespace WorkMode.UI
         public static readonly Color Surface = Color.FromArgb(34, 37, 43);      // cards / rows
         public static readonly Color SurfaceAlt = Color.FromArgb(44, 48, 56);   // inputs / mid highlights
         public static readonly Color Border = Color.FromArgb(58, 63, 72);
+        public static readonly Color WorkspaceBorder = Color.FromArgb(39, 124, 119);
 
         // Greenish-teal accent (primary).
         public static readonly Color Accent = Color.FromArgb(20, 184, 166);

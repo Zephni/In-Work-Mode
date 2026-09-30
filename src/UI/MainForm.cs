@@ -26,7 +26,6 @@ namespace WorkMode.UI
         private readonly AddWorkspaceRow _addRow;
         private readonly SimulationToggleRow _simToggleRow;
         private readonly HashSet<Keys> _heldKeys = new HashSet<Keys>();
-        private WorkspaceControl _selectedRow;
 
         public MainForm(AppConfig config)
         {
@@ -62,11 +61,6 @@ namespace WorkMode.UI
             _list.HandleCreated += (s, e) => Interop.NativeMethods.UseDarkScrollBar(_list.Handle);
 
             Controls.Add(_list);
-
-            // Clicking empty space (the list background or the form) clears the
-            // current selection. Buttons and rows handle their own clicks first.
-            Click += (s, e) => ClearSelection();
-            _list.Click += (s, e) => ClearSelection();
 
             foreach (Workspace ws in _config.Workspaces)
                 AddRow(ws);
@@ -170,7 +164,6 @@ namespace WorkMode.UI
             var row = new WorkspaceControl(ws);
             row.ToggleRequested += OnToggle;
             row.ResetRequested += OnReset;
-            row.SelectRequested += OnRowSelected;
             row.NotesChanged += OnNotesChanged;
             row.EditRequested += OnEditWorkspace;
             row.DeleteRequested += OnDeleteWorkspace;
@@ -231,40 +224,10 @@ namespace WorkMode.UI
             _config.Save();
         }
 
-        // Selects the clicked row, highlighting it. Clicking an already-selected
-        // row deselects it instead.
-        private void OnRowSelected(object sender, EventArgs e)
-        {
-            var row = sender as WorkspaceControl;
-            if (row == null) return;
-
-            if (_selectedRow == row)
-            {
-                ClearSelection();
-                return;
-            }
-
-            if (_selectedRow != null)
-                _selectedRow.Selected = false;
-
-            _selectedRow = row;
-            _selectedRow.Selected = true;
-        }
-
         // Persists notes as the user types into a workspace's notes area.
         private void OnNotesChanged(object sender, EventArgs e)
         {
             _config.Save();
-        }
-
-        // Clears any current selection.
-        private void ClearSelection()
-        {
-            if (_selectedRow != null)
-            {
-                _selectedRow.Selected = false;
-                _selectedRow = null;
-            }
         }
 
         private void OnDeleteWorkspace(object sender, EventArgs e)
@@ -279,7 +242,6 @@ namespace WorkMode.UI
             row.Dispose();
             _config.Workspaces.Remove(ws);
 
-            ClearSelection();
             UpdateActivityState();
             _config.Save();
         }

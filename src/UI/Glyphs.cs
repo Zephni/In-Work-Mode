@@ -182,6 +182,30 @@ namespace WorkMode.UI
             return bmp;
         }
 
+        public static Bitmap Notes(int size, Color color)
+        {
+            Graphics g;
+            var bmp = NewBitmap(size, out g);
+            using (var pen = new Pen(color, size * 0.09f)
+            {
+                StartCap = LineCap.Round,
+                EndCap = LineCap.Round,
+                LineJoin = LineJoin.Round
+            })
+            {
+                float left = size * 0.22f;
+                float top = size * 0.16f;
+                float right = size * 0.78f;
+                float bottom = size * 0.84f;
+                g.DrawRectangle(pen, left, top, right - left, bottom - top);
+                g.DrawLine(pen, size * 0.34f, size * 0.38f, size * 0.66f, size * 0.38f);
+                g.DrawLine(pen, size * 0.34f, size * 0.54f, size * 0.66f, size * 0.54f);
+                g.DrawLine(pen, size * 0.34f, size * 0.70f, size * 0.57f, size * 0.70f);
+            }
+            g.Dispose();
+            return bmp;
+        }
+
         public static Bitmap Info(int size, Color color)
         {
             Graphics g;
