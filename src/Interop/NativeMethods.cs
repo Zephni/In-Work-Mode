@@ -31,6 +31,7 @@ namespace WorkMode.Interop
             IntPtr hwnd, int attribute, ref int value, int size);
 
         // ---- TextBox inner padding ----
+        public const int WM_SETREDRAW = 0x000B;
         public const int EM_SETMARGINS = 0x00D3;
         public const int EM_SETRECT = 0x00B3;
         public const int EC_LEFTMARGIN = 0x0001;

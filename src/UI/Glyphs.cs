@@ -230,6 +230,87 @@ namespace WorkMode.UI
             return bmp;
         }
 
+        public static Bitmap MarkdownText(int size, Color color, string text, FontStyle style)
+        {
+            Graphics g;
+            var bmp = NewBitmap(size, out g);
+            float fontSize = text.Length > 1 ? size * 0.55f : size * 0.72f;
+            using (var font = new Font("Segoe UI", fontSize, style, GraphicsUnit.Pixel))
+            using (var brush = new SolidBrush(color))
+            using (var format = new StringFormat
+            {
+                Alignment = StringAlignment.Center,
+                LineAlignment = StringAlignment.Center
+            })
+                g.DrawString(text, font, brush, new RectangleF(0, 1, size, size), format);
+            g.Dispose();
+            return bmp;
+        }
+
+        public static Bitmap BulletedList(int size, Color color)
+        {
+            Graphics g;
+            var bmp = NewBitmap(size, out g);
+            using (var pen = new Pen(color, size * 0.09f) { StartCap = LineCap.Round, EndCap = LineCap.Round })
+            using (var brush = new SolidBrush(color))
+            {
+                for (int i = 0; i < 3; i++)
+                {
+                    float y = size * (0.28f + i * 0.23f);
+                    g.FillEllipse(brush, size * 0.16f, y - size * 0.055f, size * 0.11f, size * 0.11f);
+                    g.DrawLine(pen, size * 0.39f, y, size * 0.84f, y);
+                }
+            }
+            g.Dispose();
+            return bmp;
+        }
+
+        public static Bitmap Code(int size, Color color)
+        {
+            Graphics g;
+            var bmp = NewBitmap(size, out g);
+            using (var pen = new Pen(color, size * 0.09f)
+            {
+                StartCap = LineCap.Round,
+                EndCap = LineCap.Round,
+                LineJoin = LineJoin.Round
+            })
+            {
+                g.DrawLines(pen, new[]
+                {
+                    new PointF(size * 0.37f, size * 0.25f),
+                    new PointF(size * 0.16f, size * 0.50f),
+                    new PointF(size * 0.37f, size * 0.75f)
+                });
+                g.DrawLines(pen, new[]
+                {
+                    new PointF(size * 0.63f, size * 0.25f),
+                    new PointF(size * 0.84f, size * 0.50f),
+                    new PointF(size * 0.63f, size * 0.75f)
+                });
+            }
+            g.Dispose();
+            return bmp;
+        }
+
+        public static Bitmap Link(int size, Color color)
+        {
+            Graphics g;
+            var bmp = NewBitmap(size, out g);
+            using (var pen = new Pen(color, size * 0.09f)
+            {
+                StartCap = LineCap.Round,
+                EndCap = LineCap.Round
+            })
+            {
+                g.DrawArc(pen, size * 0.10f, size * 0.32f, size * 0.48f, size * 0.36f, 55, 250);
+                g.DrawArc(pen, size * 0.42f, size * 0.32f, size * 0.48f, size * 0.36f, 235, 250);
+                g.DrawLine(pen, size * 0.35f, size * 0.50f, size * 0.65f, size * 0.50f);
+            }
+            g.Dispose();
+            return bmp;
+        }
+
         private static Bitmap NewBitmap(int size, out Graphics g)
         {
             var bmp = new Bitmap(size, size);
