@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="vditor/dist/index.css">
+    <style>
+        html, body, #editor { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+        body { background: #2c3038; }
+        .vditor { border-color: #3a3f48; border-radius: 3px; }
+        .vditor-toolbar {
+            border-color: #3a3f48 !important;
+            background: #22252b !important;
+            padding: 0 !important;
+        }
+        .vditor-content { background: #2c3038 !important; }
+        .vditor-wysiwyg { padding: 0 !important; }
+        .vditor-wysiwyg pre.vditor-reset { padding: 12px 14px !important; }
+        .vditor-wysiwyg .vditor-reset ul,
+        .vditor-wysiwyg .vditor-reset ol { padding-left: 1.5em; }
+    </style>
+</head>
+<body>
+    <div id="editor"></div>
+    <script src="vditor/dist/index.min.js"></script>
+    <script>
+        let loading = true;
+        const editor = new Vditor('editor', {
+            mode: 'wysiwyg',
+            height: '100%',
+            lang: 'en_US',
+            theme: 'dark',
+            icon: 'material',
+            cache: { enable: false },
+            cdn: new URL('vditor', document.baseURI).href.replace(/\/$/, ''),
+            toolbar: [
+                'headings', 'bold', 'italic', 'strike', '|',
+                'list', 'ordered-list', 'check', 'outdent', 'indent', '|',
+                'quote', 'inline-code', 'code', 'link', '|', 'undo', 'redo'
+            ],
+            preview: {
+                theme: { current: 'dark' },
+                hljs: { enable: false }
+            },
+            input: value => {
+                if (!loading) window.chrome.webview.postMessage('change\n' + value);
+            },
+            after: () => window.chrome.webview.postMessage('ready')
+        });
+
+        window.chrome.webview.addEventListener('message', event => {
+            const message = event.data;
+            if (message.startsWith('load\n')) {
+                editor.setValue(message.substring(5), true);
+                loading = false;
+                editor.focus();
+            } else if (message.startsWith('insert\n')) {
+                editor.insertValue(message.substring(7));
+                editor.focus();
+            }
+        });
+    </script>
+</body>
+</html>

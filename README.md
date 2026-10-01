@@ -3,7 +3,11 @@ For tracking time and notes for one or multiple workspaces.
 <img width="600" height="ato" alt="image" src="https://github.com/user-attachments/assets/bd9dd3fa-94ec-4076-afe2-09673671f537" />
 
 ## Download
-[https://raw.githubusercontent.com/Zephni/In-Work-Mode/main/In%20Work%20Mode.exe](https://raw.githubusercontent.com/Zephni/In-Work-Mode/main/In%20Work%20Mode.exe)
+[Download In Work Mode.zip](https://raw.githubusercontent.com/Zephni/In-Work-Mode/main/In%20Work%20Mode.zip), extract it, and run `In Work Mode.exe`.
+
+The executable is standalone; the ZIP is only a download container. No adjacent DLLs or editor assets are required.
+
+The notes window uses the Microsoft Edge WebView2 Runtime included with current Windows installations. If it is missing, install the [Evergreen WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/).
 
 ## Signing
 
