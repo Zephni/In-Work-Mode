@@ -263,11 +263,15 @@ namespace WorkMode.UI
                 bool emptyBullet = _notesBox.SelectionBullet && lineLength == 0;
                 if (emptyBullet)
                 {
-                    BeginInvoke(new Action(() =>
-                    {
-                        _notesBox.SelectionIndent = 0;
-                        ScheduleSave();
-                    }));
+                    int indent = _notesBox.SelectionIndent;
+                    if (indent > 0)
+                        _notesBox.SelectionIndent = Math.Max(0, indent - ListIndentPixels);
+                    else
+                        _notesBox.SelectionBullet = false;
+
+                    e.SuppressKeyPress = true;
+                    e.Handled = true;
+                    ScheduleSave();
                 }
                 return;
             }
