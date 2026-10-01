@@ -2,6 +2,7 @@ using System;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Windows.Forms;
+using WorkMode.Configuration;
 using WorkMode.Models;
 
 namespace WorkMode.UI
@@ -13,6 +14,7 @@ namespace WorkMode.UI
         private const int CornerRadius = 10;
         private const int HeaderHeight = 56;
         private readonly Workspace _workspace;
+        private readonly AppConfig _config;
         private readonly Label _titleLabel;
         private readonly Label _timeLabel;
         private readonly Button _toggleButton;
@@ -29,6 +31,7 @@ namespace WorkMode.UI
         private bool _dragReady;
         private bool _dragging;
         private DragPreviewForm _dragPreview;
+        private NotesForm _notesForm;
 
         // Raised when the user toggles this workspace's timer on or off.
         public event EventHandler ToggleRequested;
@@ -45,9 +48,10 @@ namespace WorkMode.UI
 
         public Workspace Workspace { get { return _workspace; } }
 
-        public WorkspaceControl(Workspace workspace)
+        public WorkspaceControl(Workspace workspace, AppConfig config)
         {
             _workspace = workspace;
+            _config = config;
 
             Height = HeaderHeight;
             Margin = new Padding(0, 0, 0, 8);
@@ -385,15 +389,20 @@ namespace WorkMode.UI
 
         private void OnNotesClicked(object sender, EventArgs e)
         {
-            using (var dialog = new NotesForm(_workspace))
+            if (_notesForm != null)
             {
-                dialog.NotesChanged += (s, args) =>
-                {
-                    var h = NotesChanged;
-                    if (h != null) h(this, EventArgs.Empty);
-                };
-                dialog.ShowDialog(FindForm());
+                _notesForm.Activate();
+                return;
             }
+
+            _notesForm = new NotesForm(_workspace, _config);
+            _notesForm.NotesChanged += (s, args) =>
+            {
+                var h = NotesChanged;
+                if (h != null) h(this, EventArgs.Empty);
+            };
+            _notesForm.FormClosed += (s, args) => _notesForm = null;
+            _notesForm.Show();
         }
 
         // Refreshes the displayed title, time and button state from the model.
@@ -422,6 +431,7 @@ namespace WorkMode.UI
         {
             if (disposing)
             {
+                if (_notesForm != null) _notesForm.Close();
                 if (_tooltip != null) _tooltip.Dispose();
                 if (_dragHoldTimer != null) _dragHoldTimer.Dispose();
             }

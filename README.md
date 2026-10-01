@@ -19,6 +19,8 @@ The notes window uses the Microsoft Edge WebView2 Runtime included with current 
 
 That certificate validates locally but does not satisfy Windows Smart App Control. Distributable builds require a Public Trust profile from [Microsoft Artifact Signing](https://learn.microsoft.com/azure/artifact-signing/quickstart) or another publicly trusted code-signing provider.
 
+For local development, enable **Developer Mode** under Windows Settings > System > Advanced > For developers, then turn **Smart App Control** off under Windows Security > App & browser control. Current Windows versions allow Smart App Control to be enabled again later. The build fails with a clear error when Smart App Control is enabled without Artifact Signing, instead of producing an executable that Windows will block.
+
 After creating an Artifact Signing account and Public Trust certificate profile, install the PowerShell integration and configure the build session:
 
 ```powershell

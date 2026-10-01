@@ -156,7 +156,7 @@ namespace WorkMode.UI
 
         private void AddRow(Workspace ws)
         {
-            var row = new WorkspaceControl(ws);
+            var row = new WorkspaceControl(ws, _config);
             row.ToggleRequested += OnToggle;
             row.ResetRequested += OnReset;
             row.NotesChanged += OnNotesChanged;

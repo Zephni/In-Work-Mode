@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Text;
 using System.Windows.Forms;
@@ -25,6 +26,9 @@ namespace WorkMode.Configuration
         // Persisted window size. 0 means "not set" (use the default / minimum).
         public int WindowWidth { get; set; }
         public int WindowHeight { get; set; }
+        public int NotesWindowWidth { get; set; }
+        public int NotesWindowHeight { get; set; }
+        public double NotesZoomFactor { get; set; }
 
         // Hidden developer mode, toggled via a secret key combo (see MainForm).
         // Reveals the activity simulation controls when enabled.
@@ -132,6 +136,16 @@ namespace WorkMode.Configuration
                             cfg.WindowWidth = n;
                         else if (keyName.Equals("Height", StringComparison.OrdinalIgnoreCase) && int.TryParse(value, out n))
                             cfg.WindowHeight = n;
+                        else if (keyName.Equals("NotesWidth", StringComparison.OrdinalIgnoreCase) && int.TryParse(value, out n))
+                            cfg.NotesWindowWidth = n;
+                        else if (keyName.Equals("NotesHeight", StringComparison.OrdinalIgnoreCase) && int.TryParse(value, out n))
+                            cfg.NotesWindowHeight = n;
+                        else if (keyName.Equals("NotesZoom", StringComparison.OrdinalIgnoreCase))
+                        {
+                            double zoom;
+                            if (double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out zoom))
+                                cfg.NotesZoomFactor = zoom;
+                        }
                         continue;
                     }
 
@@ -210,11 +224,22 @@ namespace WorkMode.Configuration
                 sb.AppendLine("# Each [Workspace] section stores one tracked workspace.");
                 sb.AppendLine();
 
-                if (WindowWidth > 0 && WindowHeight > 0)
+                if ((WindowWidth > 0 && WindowHeight > 0) ||
+                    (NotesWindowWidth > 0 && NotesWindowHeight > 0) || NotesZoomFactor > 0)
                 {
                     sb.AppendLine("[Window]");
-                    sb.AppendLine("Width=" + WindowWidth);
-                    sb.AppendLine("Height=" + WindowHeight);
+                    if (WindowWidth > 0 && WindowHeight > 0)
+                    {
+                        sb.AppendLine("Width=" + WindowWidth);
+                        sb.AppendLine("Height=" + WindowHeight);
+                    }
+                    if (NotesWindowWidth > 0 && NotesWindowHeight > 0)
+                    {
+                        sb.AppendLine("NotesWidth=" + NotesWindowWidth);
+                        sb.AppendLine("NotesHeight=" + NotesWindowHeight);
+                    }
+                    if (NotesZoomFactor > 0)
+                        sb.AppendLine("NotesZoom=" + NotesZoomFactor.ToString(CultureInfo.InvariantCulture));
                     sb.AppendLine();
                 }
 

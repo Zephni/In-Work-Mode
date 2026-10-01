@@ -117,6 +117,19 @@ if (-not $certificate) {
     throw 'No local signing certificate found. Run sign.ps1 -InstallCertificate once, then rebuild.'
 }
 
+$smartAppControlState = Get-ItemPropertyValue `
+    -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\CI\Policy' `
+    -Name VerifiedAndReputablePolicyState `
+    -ErrorAction SilentlyContinue
+
+if ($smartAppControlState -eq 1) {
+    throw @'
+Smart App Control is enabled and rejects the local development certificate.
+For local development, enable Windows Developer Mode and turn Smart App Control off in Windows Security.
+To keep Smart App Control enabled, configure ARTIFACT_SIGNING_ENDPOINT, ARTIFACT_SIGNING_ACCOUNT, and ARTIFACT_SIGNING_PROFILE.
+'@
+}
+
 $signature = Set-AuthenticodeSignature `
     -LiteralPath $FilePath `
     -Certificate $certificate `
@@ -128,4 +141,3 @@ if ($signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid)
 
 Write-Host "Signed $FilePath"
 Write-Host "Signer: $($certificate.Subject)"
-Write-Warning 'This local development signature does not satisfy Windows Smart App Control. Configure ARTIFACT_SIGNING_ENDPOINT, ARTIFACT_SIGNING_ACCOUNT, and ARTIFACT_SIGNING_PROFILE for distributable builds.'

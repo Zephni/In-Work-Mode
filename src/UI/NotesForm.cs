@@ -4,6 +4,7 @@ using System.IO;
 using System.Windows.Forms;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
+using WorkMode.Configuration;
 using WorkMode.Models;
 
 namespace WorkMode.UI
@@ -13,22 +14,26 @@ namespace WorkMode.UI
         private const string ChangeMessage = "change\n";
         private const string LoadMessage = "load\n";
         private readonly Workspace _workspace;
+        private readonly AppConfig _config;
         private readonly WebView2 _editor;
         private readonly Timer _saveTimer;
         private string _pendingMarkdown;
 
         public event EventHandler NotesChanged;
 
-        public NotesForm(Workspace workspace)
+        public NotesForm(Workspace workspace, AppConfig config)
         {
             _workspace = workspace;
+            _config = config;
             _pendingMarkdown = workspace.Notes ?? string.Empty;
 
             Text = workspace.Title + " - Notes";
             FormBorderStyle = FormBorderStyle.Sizable;
-            StartPosition = FormStartPosition.CenterParent;
+            StartPosition = FormStartPosition.CenterScreen;
             MinimumSize = new Size(520, 380);
-            ClientSize = new Size(680, 520);
+            Size = new Size(
+                _config.NotesWindowWidth > 0 ? _config.NotesWindowWidth : 680,
+                _config.NotesWindowHeight > 0 ? _config.NotesWindowHeight : 520);
             MaximizeBox = false;
             MinimizeBox = false;
             Theme.ApplyForm(this);
@@ -57,12 +62,12 @@ namespace WorkMode.UI
             var closeButton = new Button
             {
                 Text = "Close",
-                DialogResult = DialogResult.OK,
                 Size = new Size(84, 34),
                 Anchor = AnchorStyles.Bottom | AnchorStyles.Right
             };
             Theme.StyleSurfaceButton(closeButton);
             closeButton.Font = new Font("Segoe UI Semibold", 10f, FontStyle.Regular);
+            closeButton.Click += (s, e) => Close();
 
             Controls.Add(_editor);
             Controls.Add(insertTimeButton);
@@ -71,9 +76,14 @@ namespace WorkMode.UI
 
             _saveTimer = new Timer { Interval = 350 };
             _saveTimer.Tick += (s, e) => SaveMarkdown();
-            FormClosing += (s, e) => SaveMarkdown();
+            FormClosing += (s, e) =>
+            {
+                SaveMarkdown();
+                SaveWindowSettings();
+            };
             Shown += async (s, e) => await InitializeEditorAsync();
             Resize += (s, e) => LayoutControls(insertTimeButton, closeButton);
+            ResizeEnd += (s, e) => SaveWindowSettings();
             LayoutControls(insertTimeButton, closeButton);
         }
 
@@ -88,6 +98,9 @@ namespace WorkMode.UI
                 await _editor.EnsureCoreWebView2Async(environment);
                 _editor.CoreWebView2.Settings.AreDevToolsEnabled = false;
                 _editor.CoreWebView2.WebMessageReceived += OnWebMessageReceived;
+                if (_config.NotesZoomFactor > 0)
+                    _editor.ZoomFactor = _config.NotesZoomFactor;
+                _editor.ZoomFactorChanged += (s, e) => SaveZoomFactor();
 
                 string editorPath = Path.Combine(EmbeddedRuntime.EditorDirectory, "index.html");
                 if (!File.Exists(editorPath))
@@ -146,6 +159,20 @@ namespace WorkMode.UI
             _workspace.Notes = _pendingMarkdown;
             var handler = NotesChanged;
             if (handler != null) handler(this, EventArgs.Empty);
+        }
+
+        private void SaveWindowSettings()
+        {
+            if (WindowState != FormWindowState.Normal) return;
+            _config.NotesWindowWidth = Width;
+            _config.NotesWindowHeight = Height;
+            _config.Save();
+        }
+
+        private void SaveZoomFactor()
+        {
+            _config.NotesZoomFactor = _editor.ZoomFactor;
+            _config.Save();
         }
 
         private void LayoutControls(Button insertTimeButton, Button closeButton)
