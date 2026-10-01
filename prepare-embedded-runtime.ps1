@@ -14,7 +14,20 @@ Copy-Item (Join-Path $webView2 'lib\net462\Microsoft.Web.WebView2.Core.dll') $ru
 Copy-Item (Join-Path $webView2 'lib\net462\Microsoft.Web.WebView2.WinForms.dll') $runtime
 Copy-Item (Join-Path $webView2 'runtimes\win-x64\native\WebView2Loader.dll') $runtime
 Copy-Item (Join-Path $PSScriptRoot 'src\UI\NotesEditor.html') (Join-Path $editor 'index.html')
-Copy-Item (Join-Path $vditor 'dist\*') (Join-Path $editor 'vditor\dist') -Recurse -Force
+$assetPaths = @(
+	'index.css',
+	'index.min.js',
+	'css\content-theme\dark.css',
+	'js\icons\material.js',
+	'js\i18n\en_US.js',
+	'js\lute\lute.min.js'
+)
+foreach ($assetPath in $assetPaths) {
+	$source = Join-Path (Join-Path $vditor 'dist') $assetPath
+	$destination = Join-Path (Join-Path $editor 'vditor\dist') $assetPath
+	New-Item -ItemType Directory -Force (Split-Path $destination) | Out-Null
+	Copy-Item $source $destination -Force
+}
 Copy-Item (Join-Path $vditor 'LICENSE') (Join-Path $editor 'vditor\LICENSE') -Force
 
 Compress-Archive -Path (Join-Path $runtime '*') -DestinationPath $archive -CompressionLevel Optimal

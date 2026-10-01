@@ -18,6 +18,8 @@
         .vditor-wysiwyg pre.vditor-reset { padding: 12px 14px !important; }
         .vditor-wysiwyg .vditor-reset ul,
         .vditor-wysiwyg .vditor-reset ol { padding-left: 1.5em; }
+        .vditor-wysiwyg .vditor-reset li + li { margin-top: 0; }
+        .vditor-wysiwyg .vditor-reset li p { margin: 0; }
     </style>
 </head>
 <body>
@@ -45,7 +47,26 @@
             input: value => {
                 if (!loading) window.chrome.webview.postMessage('change\n' + value);
             },
-            after: () => window.chrome.webview.postMessage('ready')
+            after: () => {
+                const editorElement = document.getElementById('editor');
+                editorElement.addEventListener('keydown', event => {
+                    const anchorNode = window.getSelection().anchorNode;
+                    if (!anchorNode) return;
+                    const anchorElement = anchorNode.nodeType === Node.ELEMENT_NODE
+                        ? anchorNode
+                        : anchorNode.parentElement;
+                    const listItem = anchorElement.closest('.vditor-wysiwyg li');
+                    if (event.key !== 'Tab' || !listItem) return;
+
+                    const selection = window.getSelection();
+                    if (selection.isCollapsed) {
+                        const range = selection.getRangeAt(0);
+                        range.setStart(listItem, 0);
+                        range.collapse(true);
+                    }
+                }, true);
+                window.chrome.webview.postMessage('ready');
+            }
         });
 
         window.chrome.webview.addEventListener('message', event => {
