@@ -34,5 +34,5 @@ if %ERRORLEVEL% neq 0 (
     exit /b %ERRORLEVEL%
 )
 
-echo Build and signing succeeded: In Work Mode.exe
+echo Build succeeded: In Work Mode.exe
 endlocal

@@ -10,6 +10,8 @@ namespace WorkMode.UI
 {
     public sealed class NotesForm : Form
     {
+        private const int ListIndentPixels = 24;
+        private const int MarkdownIndentSpaces = 2;
         private readonly Workspace _workspace;
         private readonly RichTextBox _notesBox;
         private readonly FlowLayoutPanel _markdownToolbar;
@@ -41,12 +43,14 @@ namespace WorkMode.UI
                 ForeColor = Theme.Text,
                 Font = new Font("Segoe UI", 10f, FontStyle.Regular),
                 WordWrap = true,
+                AcceptsTab = true,
                 DetectUrls = true,
                 Location = new Point(12, 12),
                 Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right
             };
             LoadMarkdown(workspace.Notes ?? string.Empty);
             _notesBox.TextChanged += OnNotesChanged;
+            _notesBox.KeyDown += OnNotesKeyDown;
             _notesBox.HandleCreated += (s, e) => ApplyNotesPadding();
             _notesBox.LinkClicked += OnLinkClicked;
 
@@ -112,9 +116,9 @@ namespace WorkMode.UI
             };
 
             Color iconColor = Theme.Text;
-            panel.Controls.Add(CreateMarkdownButton(Glyphs.MarkdownText(26, iconColor, "H1", FontStyle.Regular), "Heading", (s, e) => FormatHeading()));
+            panel.Controls.Add(CreateMarkdownButton(Glyphs.MarkdownText(26, iconColor, "H1", FontStyle.Bold), "Heading", (s, e) => FormatHeading()));
             panel.Controls.Add(CreateMarkdownButton(Glyphs.BulletedList(26, iconColor), "Bulleted list", (s, e) => FormatBulletedList()));
-            panel.Controls.Add(CreateMarkdownButton(Glyphs.MarkdownText(26, iconColor, "1.", FontStyle.Regular), "Numbered list", (s, e) => FormatNumberedList()));
+            panel.Controls.Add(CreateMarkdownButton(Glyphs.MarkdownText(26, iconColor, "1.", FontStyle.Bold), "Numbered list", (s, e) => FormatNumberedList()));
             panel.Controls.Add(CreateMarkdownButton(Glyphs.MarkdownText(26, iconColor, "B", FontStyle.Bold), "Bold", (s, e) => FormatSelection(FontStyle.Bold)));
             panel.Controls.Add(CreateMarkdownButton(Glyphs.MarkdownText(26, iconColor, "I", FontStyle.Italic), "Italic", (s, e) => FormatSelection(FontStyle.Italic)));
             panel.Controls.Add(CreateMarkdownButton(Glyphs.Code(26, iconColor), "Inline code", (s, e) => FormatCode()));
@@ -232,6 +236,72 @@ namespace WorkMode.UI
             _notesBox.Select(start, Math.Max(0, end - start));
         }
 
+        private void OnNotesKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.KeyCode == Keys.Back && _notesBox.SelectionLength == 0)
+            {
+                int line = _notesBox.GetLineFromCharIndex(_notesBox.SelectionStart);
+                string[] lines = _notesBox.Lines;
+                int lineLength = line < lines.Length ? lines[line].Length : 0;
+                bool emptyBullet = _notesBox.SelectionBullet && lineLength == 0;
+                if (emptyBullet)
+                {
+                    _notesBox.SelectionBullet = false;
+                    _notesBox.SelectionIndent = 0;
+                    e.SuppressKeyPress = true;
+                    e.Handled = true;
+                    ScheduleSave();
+                }
+                return;
+            }
+
+            if (e.KeyCode == Keys.Enter)
+            {
+                int line = _notesBox.GetLineFromCharIndex(_notesBox.SelectionStart);
+                string[] lines = _notesBox.Lines;
+                int lineLength = line < lines.Length ? lines[line].Length : 0;
+                bool emptyBullet = _notesBox.SelectionBullet && lineLength == 0;
+                if (emptyBullet)
+                {
+                    BeginInvoke(new Action(() =>
+                    {
+                        _notesBox.SelectionIndent = 0;
+                        ScheduleSave();
+                    }));
+                }
+                return;
+            }
+
+            if (e.KeyCode != Keys.Tab) return;
+
+            int selectionStart = _notesBox.SelectionStart;
+            int selectionLength = _notesBox.SelectionLength;
+            int startLine = _notesBox.GetLineFromCharIndex(selectionStart);
+            int selectionEnd = selectionLength > 0
+                ? selectionStart + selectionLength - 1
+                : selectionStart;
+            int endLine = _notesBox.GetLineFromCharIndex(selectionEnd);
+            bool changed = false;
+
+            for (int line = startLine; line <= endLine; line++)
+            {
+                int lineStart = _notesBox.GetFirstCharIndexFromLine(line);
+                _notesBox.Select(lineStart, _notesBox.Lines[line].Length);
+                if (!_notesBox.SelectionBullet) continue;
+
+                int indent = _notesBox.SelectionIndent + (e.Shift ? -ListIndentPixels : ListIndentPixels);
+                _notesBox.SelectionIndent = Math.Max(0, indent);
+                changed = true;
+            }
+
+            _notesBox.Select(selectionStart, selectionLength);
+            if (!changed) return;
+
+            e.SuppressKeyPress = true;
+            e.Handled = true;
+            ScheduleSave();
+        }
+
         private void LayoutControls(Button insertTimeButton, Button closeButton)
         {
             const int margin = 12;
@@ -300,7 +370,11 @@ namespace WorkMode.UI
                 _notesBox.Select(lineStart, line.Length > 0 ? 1 : 0);
                 bool bullet = _notesBox.SelectionBullet;
                 if (heading) markdown.Append("# ");
-                else if (bullet) markdown.Append("- ");
+                else if (bullet)
+                {
+                    int indentLevel = Math.Max(0, _notesBox.SelectionIndent / ListIndentPixels);
+                    markdown.Append(' ', indentLevel * MarkdownIndentSpaces).Append("- ");
+                }
                 markdown.Append(SerializeInline(lineStart, line.Length, heading));
                 if (lineIndex < _notesBox.Lines.Length - 1) markdown.AppendLine();
             }
@@ -383,8 +457,12 @@ namespace WorkMode.UI
 
             ReplaceMarkdown(@"(?m)^#{1,3}[ \t]+(.+)$", 1, (start, length, match) =>
                 _notesBox.SelectionFont = new Font(_notesBox.Font.FontFamily, 16f, FontStyle.Bold));
-            ReplaceMarkdown(@"(?m)^[-*][ \t]+(.+)$", 1, (start, length, match) =>
-                _notesBox.SelectionBullet = true);
+            ReplaceMarkdown(@"(?m)^([ \t]*)[-*][ \t]+(.+)$", 2, (start, length, match) =>
+            {
+                int spaces = match.Groups[1].Value.Replace("\t", "    ").Length;
+                _notesBox.SelectionBullet = true;
+                _notesBox.SelectionIndent = (spaces / MarkdownIndentSpaces) * ListIndentPixels;
+            });
             ReplaceMarkdown(@"\[([^\]]+)\]\(([^)]+)\)", 1, (start, length, match) =>
             {
                 _linkTargets[match.Groups[1].Value] = match.Groups[2].Value;

@@ -1,6 +1,9 @@
 param(
     [string]$FilePath = (Join-Path $PSScriptRoot 'In Work Mode.exe'),
-    [switch]$InstallCertificate
+    [switch]$InstallCertificate,
+    [string]$ArtifactSigningEndpoint = $env:ARTIFACT_SIGNING_ENDPOINT,
+    [string]$ArtifactSigningAccount = $env:ARTIFACT_SIGNING_ACCOUNT,
+    [string]$ArtifactSigningProfile = $env:ARTIFACT_SIGNING_PROFILE
 )
 
 $ErrorActionPreference = 'Stop'
@@ -74,12 +77,44 @@ if ($InstallCertificate) {
     exit 0
 }
 
-if (-not $certificate) {
-    throw 'No local signing certificate found. Run sign.ps1 -InstallCertificate once, then rebuild.'
-}
-
 if (-not (Test-Path -LiteralPath $FilePath -PathType Leaf)) {
     throw "Cannot sign missing file: $FilePath"
+}
+
+$artifactSigningValues = @(
+    $ArtifactSigningEndpoint,
+    $ArtifactSigningAccount,
+    $ArtifactSigningProfile
+)
+$useArtifactSigning = @($artifactSigningValues | Where-Object { $_ }).Count -gt 0
+
+if ($useArtifactSigning) {
+    if (@($artifactSigningValues | Where-Object { -not $_ }).Count -gt 0) {
+        throw 'Artifact Signing requires ARTIFACT_SIGNING_ENDPOINT, ARTIFACT_SIGNING_ACCOUNT, and ARTIFACT_SIGNING_PROFILE.'
+    }
+
+    Import-Module ArtifactSigning -ErrorAction Stop
+    Invoke-ArtifactSigning `
+        -Endpoint $ArtifactSigningEndpoint `
+        -CodeSigningAccountName $ArtifactSigningAccount `
+        -CertificateProfileName $ArtifactSigningProfile `
+        -Files $FilePath `
+        -FileDigest SHA256 `
+        -TimestampRfc3161 'http://timestamp.acs.microsoft.com' `
+        -TimestampDigest SHA256
+
+    $signature = Get-AuthenticodeSignature -LiteralPath $FilePath
+    if ($signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid) {
+        throw "The Artifact Signing signature is not valid: $($signature.StatusMessage)"
+    }
+
+    Write-Host "Signed $FilePath with Microsoft Artifact Signing"
+    Write-Host "Signer: $($signature.SignerCertificate.Subject)"
+    exit 0
+}
+
+if (-not $certificate) {
+    throw 'No local signing certificate found. Run sign.ps1 -InstallCertificate once, then rebuild.'
 }
 
 $signature = Set-AuthenticodeSignature `
@@ -93,3 +128,4 @@ if ($signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid)
 
 Write-Host "Signed $FilePath"
 Write-Host "Signer: $($certificate.Subject)"
+Write-Warning 'This local development signature does not satisfy Windows Smart App Control. Configure ARTIFACT_SIGNING_ENDPOINT, ARTIFACT_SIGNING_ACCOUNT, and ARTIFACT_SIGNING_PROFILE for distributable builds.'
