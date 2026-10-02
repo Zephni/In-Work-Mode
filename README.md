@@ -1,36 +1,4 @@
 # In Work Mode
-For tracking time and notes for one or multiple workspaces.
-<img width="600" height="ato" alt="image" src="https://github.com/user-attachments/assets/bd9dd3fa-94ec-4076-afe2-09673671f537" />
 
 ## Download
-[Download In Work Mode.zip](https://raw.githubusercontent.com/Zephni/In-Work-Mode/main/In%20Work%20Mode.zip), extract it, and run `In Work Mode.exe`.
-
-The executable is standalone; the ZIP is only a download container. No adjacent DLLs or editor assets are required.
-
-The notes window uses the Microsoft Edge WebView2 Runtime included with current Windows installations. If it is missing, install the [Evergreen WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/).
-
-## Signing
-
-`build.bat` always signs the executable. By default it uses the local development certificate installed by:
-
-```powershell
-.\sign.ps1 -InstallCertificate
-```
-
-That certificate validates locally but does not satisfy Windows Smart App Control. Distributable builds require a Public Trust profile from [Microsoft Artifact Signing](https://learn.microsoft.com/azure/artifact-signing/quickstart) or another publicly trusted code-signing provider.
-
-For local development, enable **Developer Mode** under Windows Settings > System > Advanced > For developers, then turn **Smart App Control** off under Windows Security > App & browser control. Current Windows versions allow Smart App Control to be enabled again later. The build fails with a clear error when Smart App Control is enabled without Artifact Signing, instead of producing an executable that Windows will block.
-
-After creating an Artifact Signing account and Public Trust certificate profile, install the PowerShell integration and configure the build session:
-
-```powershell
-Install-PSResource -Name ArtifactSigning -Scope CurrentUser -TrustRepository
-
-$env:ARTIFACT_SIGNING_ENDPOINT = 'https://<region>.codesigning.azure.net'
-$env:ARTIFACT_SIGNING_ACCOUNT = '<account-name>'
-$env:ARTIFACT_SIGNING_PROFILE = '<certificate-profile-name>'
-
-.\build.bat
-```
-
-Authentication uses Azure `DefaultAzureCredential`. The signed executable is timestamped with Microsoft's Artifact Signing timestamp service.
+[https://raw.githubusercontent.com/Zephni/In-Work-Mode/main/In%20Work%20Mode.exe](https://raw.githubusercontent.com/Zephni/In-Work-Mode/main/In%20Work%20Mode.exe)
