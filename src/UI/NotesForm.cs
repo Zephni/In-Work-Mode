@@ -35,7 +35,7 @@ namespace WorkMode.UI
                 _config.NotesWindowWidth > 0 ? _config.NotesWindowWidth : 680,
                 _config.NotesWindowHeight > 0 ? _config.NotesWindowHeight : 520);
             MaximizeBox = false;
-            MinimizeBox = false;
+            MinimizeBox = true;
             Theme.ApplyForm(this);
 
             _editor = new WebView2
@@ -45,34 +45,7 @@ namespace WorkMode.UI
                 Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right
             };
 
-            var insertTimeButton = new Button
-            {
-                Text = "Insert time",
-                Image = Glyphs.Clock(18, Color.White),
-                ImageAlign = ContentAlignment.MiddleLeft,
-                TextAlign = ContentAlignment.MiddleRight,
-                Padding = new Padding(8, 0, 10, 0),
-                Size = new Size(128, 34),
-                Anchor = AnchorStyles.Bottom | AnchorStyles.Left
-            };
-            Theme.StyleButton(insertTimeButton, Theme.NeutralGray, Theme.NeutralGrayHover, Color.White);
-            insertTimeButton.Font = new Font("Segoe UI Semibold", 10f, FontStyle.Regular);
-            insertTimeButton.Click += OnInsertTime;
-
-            var closeButton = new Button
-            {
-                Text = "Close",
-                Size = new Size(84, 34),
-                Anchor = AnchorStyles.Bottom | AnchorStyles.Right
-            };
-            Theme.StyleSurfaceButton(closeButton);
-            closeButton.Font = new Font("Segoe UI Semibold", 10f, FontStyle.Regular);
-            closeButton.Click += (s, e) => Close();
-
             Controls.Add(_editor);
-            Controls.Add(insertTimeButton);
-            Controls.Add(closeButton);
-            CancelButton = closeButton;
 
             _saveTimer = new Timer { Interval = 350 };
             _saveTimer.Tick += (s, e) => SaveMarkdown();
@@ -82,9 +55,9 @@ namespace WorkMode.UI
                 SaveWindowSettings();
             };
             Shown += async (s, e) => await InitializeEditorAsync();
-            Resize += (s, e) => LayoutControls(insertTimeButton, closeButton);
+            Resize += (s, e) => LayoutEditor();
             ResizeEnd += (s, e) => SaveWindowSettings();
-            LayoutControls(insertTimeButton, closeButton);
+            LayoutEditor();
         }
 
         private async System.Threading.Tasks.Task InitializeEditorAsync()
@@ -142,16 +115,6 @@ namespace WorkMode.UI
             _saveTimer.Start();
         }
 
-        private void OnInsertTime(object sender, EventArgs e)
-        {
-            if (_editor.CoreWebView2 == null) return;
-            _workspace.Sync();
-            string line = DateTime.Now.ToString("yyyy-MM-dd") + " hours: " +
-                          Workspace.Format(_workspace.ElapsedSeconds) + "\n";
-            _editor.CoreWebView2.PostWebMessageAsString("insert\n" + line);
-            _editor.Focus();
-        }
-
         private void SaveMarkdown()
         {
             _saveTimer.Stop();
@@ -175,18 +138,14 @@ namespace WorkMode.UI
             _config.Save();
         }
 
-        private void LayoutControls(Button insertTimeButton, Button closeButton)
+        private void LayoutEditor()
         {
             const int margin = 12;
-            const int gap = 10;
-            int buttonTop = ClientSize.Height - margin - insertTimeButton.Height;
             _editor.SetBounds(
                 margin,
                 margin,
                 ClientSize.Width - margin * 2,
-                buttonTop - gap - margin);
-            insertTimeButton.Location = new Point(margin, buttonTop);
-            closeButton.Location = new Point(ClientSize.Width - margin - closeButton.Width, buttonTop);
+                ClientSize.Height - margin * 2);
         }
 
         protected override void Dispose(bool disposing)
