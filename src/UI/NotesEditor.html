@@ -34,6 +34,19 @@
             theme: 'dark',
             icon: 'material',
             cache: { enable: false },
+            link: {
+                click: link => {
+                    const destination = (link.getAttribute('href') || link.textContent || '').trim();
+                    try {
+                        const url = new URL(destination);
+                        if (!['http:', 'https:', 'mailto:'].includes(url.protocol) ||
+                            url.hostname === 'workmode.editor') return;
+                        window.chrome.webview.postMessage('open\n' + url.href);
+                    } catch {
+                        return;
+                    }
+                }
+            },
             cdn: new URL('vditor', document.baseURI).href.replace(/\/$/, ''),
             toolbar: [
                 'headings', 'bold', 'italic', 'strike', '|',

@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Windows.Forms;
@@ -13,6 +14,7 @@ namespace WorkMode.UI
     {
         private const string ChangeMessage = "change\n";
         private const string LoadMessage = "load\n";
+        private const string OpenMessage = "open\n";
         private readonly Workspace _workspace;
         private readonly AppConfig _config;
         private readonly WebView2 _editor;
@@ -71,6 +73,8 @@ namespace WorkMode.UI
                 await _editor.EnsureCoreWebView2Async(environment);
                 _editor.CoreWebView2.Settings.AreDevToolsEnabled = false;
                 _editor.CoreWebView2.WebMessageReceived += OnWebMessageReceived;
+                _editor.CoreWebView2.NewWindowRequested += OnNewWindowRequested;
+                _editor.CoreWebView2.NavigationStarting += OnNavigationStarting;
                 if (_config.NotesZoomFactor > 0)
                     _editor.ZoomFactor = _config.NotesZoomFactor;
                 _editor.ZoomFactorChanged += (s, e) => SaveZoomFactor();
@@ -97,11 +101,58 @@ namespace WorkMode.UI
             }
         }
 
+        private void OnNewWindowRequested(object sender, CoreWebView2NewWindowRequestedEventArgs e)
+        {
+            e.Handled = true;
+            OpenExternalLink(e.Uri);
+        }
+
+        private void OnNavigationStarting(object sender, CoreWebView2NavigationStartingEventArgs e)
+        {
+            Uri uri;
+            if (Uri.TryCreate(e.Uri, UriKind.Absolute, out uri) &&
+                uri.Scheme == Uri.UriSchemeHttps && uri.Host == "workmode.editor" && uri.IsDefaultPort)
+                return;
+
+            e.Cancel = true;
+            OpenExternalLink(e.Uri);
+        }
+
+        private void OpenExternalLink(string url)
+        {
+            Uri uri;
+            if (!Uri.TryCreate(url, UriKind.Absolute, out uri) ||
+                uri.Host == "workmode.editor" ||
+                (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps &&
+                 uri.Scheme != Uri.UriSchemeMailto))
+                return;
+
+            try
+            {
+                Process.Start(new ProcessStartInfo(uri.AbsoluteUri) { UseShellExecute = true });
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    this,
+                    "The link could not be opened.\r\n\r\n" + ex.Message,
+                    "Unable to open link",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+            }
+        }
+
         private void OnWebMessageReceived(object sender, CoreWebView2WebMessageReceivedEventArgs e)
         {
             string message;
             try { message = e.TryGetWebMessageAsString(); }
             catch { return; }
+
+            if (message.StartsWith(OpenMessage, StringComparison.Ordinal))
+            {
+                OpenExternalLink(message.Substring(OpenMessage.Length));
+                return;
+            }
 
             if (message == "ready")
             {
