@@ -25,6 +25,7 @@ namespace WorkMode.UI
         private readonly Timer _tickTimer;
         private readonly AddWorkspaceRow _addRow;
         private readonly SimulationToggleRow _simToggleRow;
+        private readonly CustomActionsControl _customActions;
         private readonly HashSet<Keys> _heldKeys = new HashSet<Keys>();
         private bool _resizeRowsPending;
 
@@ -61,7 +62,80 @@ namespace WorkMode.UI
             // Darken the native scrollbar so it matches the rest of the theme.
             _list.HandleCreated += (s, e) => Interop.NativeMethods.UseDarkScrollBar(_list.Handle);
 
-            Controls.Add(_list);
+            _customActions = new CustomActionsControl(_config) { Dock = DockStyle.Fill, Visible = false };
+            var pages = new Panel { Dock = DockStyle.Fill, BackColor = Theme.Background };
+            pages.Controls.Add(_list);
+            pages.Controls.Add(_customActions);
+            var tabs = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill, WrapContents = false,
+                BackColor = Theme.Surface, Padding = new Padding(10, 5, 0, 0),
+                AccessibleRole = AccessibleRole.PageTabList, AccessibleName = "Main tabs"
+            };
+            var trackingTab = new Button { Text = "Time Tracking", Size = new Size(134, 34), Margin = new Padding(0, 0, 6, 0) };
+            var actionsTab = new Button { Text = "Custom Actions", Size = new Size(142, 34), Margin = new Padding(0) };
+            trackingTab.TextImageRelation = actionsTab.TextImageRelation = TextImageRelation.ImageBeforeText;
+            trackingTab.Disposed += (s, e) => { if (trackingTab.Image != null) trackingTab.Image.Dispose(); };
+            actionsTab.Disposed += (s, e) => { if (actionsTab.Image != null) actionsTab.Image.Dispose(); };
+            trackingTab.AccessibleRole = actionsTab.AccessibleRole = AccessibleRole.PageTab;
+            Action<bool> selectTab = tracking =>
+            {
+                _list.Visible = tracking;
+                _customActions.Visible = !tracking;
+                Theme.StyleButton(trackingTab, tracking ? Theme.SurfaceAlt : Theme.Surface, Theme.SurfaceAlt,
+                    tracking ? Theme.Accent : Theme.TextMuted);
+                Theme.StyleButton(actionsTab, tracking ? Theme.Surface : Theme.SurfaceAlt, Theme.SurfaceAlt,
+                    tracking ? Theme.TextMuted : Theme.Accent);
+                Image trackingImage = trackingTab.Image;
+                Image actionsImage = actionsTab.Image;
+                trackingTab.Image = Glyphs.Clock(18, tracking ? Theme.Accent : Theme.TextMuted);
+                actionsTab.Image = Glyphs.Code(18, tracking ? Theme.TextMuted : Theme.Accent);
+                if (trackingImage != null) trackingImage.Dispose();
+                if (actionsImage != null) actionsImage.Dispose();
+                trackingTab.AccessibleDescription = tracking ? "Selected tab" : "Tab";
+                actionsTab.AccessibleDescription = tracking ? "Tab" : "Selected tab";
+                if (tracking) QueueResizeRows();
+            };
+            trackingTab.Click += (s, e) => selectTab(true);
+            actionsTab.Click += (s, e) => selectTab(false);
+            trackingTab.KeyDown += (s, e) =>
+            {
+                if (e.KeyCode != Keys.Right) return;
+                selectTab(false);
+                actionsTab.Focus();
+                e.SuppressKeyPress = true;
+            };
+            actionsTab.KeyDown += (s, e) =>
+            {
+                if (e.KeyCode != Keys.Left) return;
+                selectTab(true);
+                trackingTab.Focus();
+                e.SuppressKeyPress = true;
+            };
+            KeyDown += (s, e) =>
+            {
+                if (!e.Control || e.KeyCode != Keys.Tab) return;
+                bool tracking = !_list.Visible;
+                selectTab(tracking);
+                if (tracking) trackingTab.Focus();
+                else actionsTab.Focus();
+                e.SuppressKeyPress = true;
+            };
+            tabs.Controls.Add(trackingTab);
+            tabs.Controls.Add(actionsTab);
+            var container = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2,
+                BackColor = Theme.Background, Margin = new Padding(0), Padding = new Padding(0)
+            };
+            container.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            container.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
+            container.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            tabs.Margin = pages.Margin = new Padding(0);
+            container.Controls.Add(tabs, 0, 0);
+            container.Controls.Add(pages, 0, 1);
+            Controls.Add(container);
+            selectTab(true);
 
             foreach (Workspace ws in _config.Workspaces)
                 AddRow(ws);

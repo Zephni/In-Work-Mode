@@ -19,7 +19,14 @@ namespace WorkMode.UI
         public event EventHandler AddRequested;
 
         public AddWorkspaceRow()
+            : this("Add New Workspace")
         {
+        }
+
+        public AddWorkspaceRow(string caption)
+        {
+            Text = caption;
+            AccessibleName = caption;
             Height = RowHeight;
             Margin = new Padding(0, 0, 0, 8);
             BackColor = Theme.Background;
@@ -44,7 +51,7 @@ namespace WorkMode.UI
                 e.Graphics.DrawPath(pen, path);
 
             Color contentColor = _hover ? Theme.Accent : Theme.TextMuted;
-            const string text = "Add New Workspace";
+            string text = Text;
             using (var font = new Font("Segoe UI Semibold", 9.5f, FontStyle.Regular))
             using (var icon = Glyphs.Plus(18, contentColor))
             {

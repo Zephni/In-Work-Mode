@@ -7,6 +7,20 @@ namespace WorkMode.UI
     // Everything is rendered with GDI+ so the app needs no external icon assets.
     internal static class Glyphs
     {
+        public static Bitmap Check(int size, Color color)
+        {
+            Graphics g;
+            var bmp = NewBitmap(size, out g);
+            using (var pen = new Pen(color, size * 0.12f) { StartCap = LineCap.Round, EndCap = LineCap.Round })
+                g.DrawLines(pen, new[] {
+                    new PointF(size * 0.20f, size * 0.52f),
+                    new PointF(size * 0.42f, size * 0.74f),
+                    new PointF(size * 0.80f, size * 0.26f)
+                });
+            g.Dispose();
+            return bmp;
+        }
+
         public static Bitmap Play(int size, Color color)
         {
             Graphics g;

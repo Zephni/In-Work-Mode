@@ -22,6 +22,8 @@ namespace WorkMode.Configuration
     public sealed class AppConfig
     {
         public List<Workspace> Workspaces { get; private set; }
+        public List<CustomAction> CustomActions { get; private set; }
+        private readonly string _configPath;
 
         // Persisted window size. 0 means "not set" (use the default / minimum).
         public int WindowWidth { get; set; }
@@ -34,9 +36,15 @@ namespace WorkMode.Configuration
         // Reveals the activity simulation controls when enabled.
         public bool DevMode { get; set; }
 
-        public AppConfig()
+        public AppConfig() : this(ConfigPath)
         {
+        }
+
+        internal AppConfig(string configPath)
+        {
+            _configPath = configPath;
             Workspaces = new List<Workspace>();
+            CustomActions = new List<CustomAction>();
         }
 
         private static string ConfigDirectory
@@ -86,12 +94,15 @@ namespace WorkMode.Configuration
         // file simply yields an empty workspace list so the app always starts.
         public static AppConfig Load()
         {
-            var cfg = new AppConfig();
+            MigrateLegacyConfigIfNeeded();
+            return Load(ConfigPath);
+        }
+
+        internal static AppConfig Load(string path)
+        {
+            var cfg = new AppConfig(path);
             try
             {
-                MigrateLegacyConfigIfNeeded();
-
-                string path = ConfigPath;
                 if (!File.Exists(path)) return cfg;
 
                 string currentTitle = null;
@@ -100,6 +111,7 @@ namespace WorkMode.Configuration
                 bool inWorkspace = false;
                 bool inWindow = false;
                 bool inSettings = false;
+                CustomAction currentAction = null;
 
                 foreach (string raw in File.ReadAllLines(path))
                 {
@@ -110,8 +122,11 @@ namespace WorkMode.Configuration
                     {
                         // New section: flush the previous workspace (if any).
                         if (inWorkspace) cfg.Add(currentTitle, currentSeconds, currentNotes);
+                        if (currentAction != null) cfg.CustomActions.Add(currentAction);
 
                         string section = line.Substring(1, line.Length - 2).Trim();
+                        currentAction = section.Equals("CustomAction", StringComparison.OrdinalIgnoreCase)
+                            ? new CustomAction() : null;
                         inWorkspace = section.Equals("Workspace", StringComparison.OrdinalIgnoreCase);
                         inWindow = section.Equals("Window", StringComparison.OrdinalIgnoreCase);
                         inSettings = section.Equals("Settings", StringComparison.OrdinalIgnoreCase);
@@ -121,13 +136,26 @@ namespace WorkMode.Configuration
                         continue;
                     }
 
-                    if (!inWorkspace && !inWindow && !inSettings) continue;
+                    if (!inWorkspace && !inWindow && !inSettings && currentAction == null) continue;
 
                     int eq = line.IndexOf('=');
                     if (eq <= 0) continue;
 
                     string keyName = line.Substring(0, eq).Trim();
                     string value = line.Substring(eq + 1).Trim();
+
+                    if (currentAction != null)
+                    {
+                        if (keyName.Equals("Title", StringComparison.OrdinalIgnoreCase))
+                            currentAction.Title = UnescapeNotes(value);
+                        else if (keyName.Equals("Type", StringComparison.OrdinalIgnoreCase))
+                            currentAction.Type = value;
+                        else if (keyName.Equals("Command", StringComparison.OrdinalIgnoreCase))
+                            currentAction.Command = UnescapeNotes(value);
+                        else if (keyName.Equals("WorkingDirectory", StringComparison.OrdinalIgnoreCase))
+                            currentAction.WorkingDirectory = UnescapeNotes(value);
+                        continue;
+                    }
 
                     if (inWindow)
                     {
@@ -170,6 +198,7 @@ namespace WorkMode.Configuration
 
                 // Flush the final workspace.
                 if (inWorkspace) cfg.Add(currentTitle, currentSeconds, currentNotes);
+                if (currentAction != null) cfg.CustomActions.Add(currentAction);
             }
             catch { }
             return cfg;
@@ -218,6 +247,13 @@ namespace WorkMode.Configuration
         {
             try
             {
+                SaveOrThrow();
+            }
+            catch { }
+        }
+
+        public void SaveOrThrow()
+        {
                 var sb = new StringBuilder();
                 sb.AppendLine("# Work Mode configuration");
                 sb.AppendLine("# Lines starting with # or ; are comments.");
@@ -258,10 +294,17 @@ namespace WorkMode.Configuration
                     sb.AppendLine();
                 }
 
-                Directory.CreateDirectory(ConfigDirectory);
-                File.WriteAllText(ConfigPath, sb.ToString());
-            }
-            catch { }
+                Directory.CreateDirectory(Path.GetDirectoryName(_configPath));
+                foreach (CustomAction action in CustomActions)
+                {
+                    sb.AppendLine("[CustomAction]");
+                    sb.AppendLine("Title=" + EscapeNotes(action.Title));
+                    sb.AppendLine("Type=" + action.Type);
+                    sb.AppendLine("Command=" + EscapeNotes(action.Command));
+                    sb.AppendLine("WorkingDirectory=" + EscapeNotes(action.WorkingDirectory));
+                    sb.AppendLine();
+                }
+                File.WriteAllText(_configPath, sb.ToString());
         }
     }
 }

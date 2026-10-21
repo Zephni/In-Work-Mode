@@ -21,6 +21,18 @@ namespace WorkMode.Interop
         [DllImport("kernel32.dll")]
         public static extern uint SetThreadExecutionState(uint esFlags);
 
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool PeekNamedPipe(
+            Microsoft.Win32.SafeHandles.SafeFileHandle pipe, IntPtr buffer, uint bufferSize,
+            IntPtr bytesRead, out uint bytesAvailable, IntPtr bytesLeft);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool ReadFile(
+            Microsoft.Win32.SafeHandles.SafeFileHandle file, byte[] buffer, uint bytesToRead,
+            out uint bytesRead, IntPtr overlapped);
+
         // ---- Dark title bar (Windows 10 1809+ / Windows 11) ----
         // DWMWA_USE_IMMERSIVE_DARK_MODE was 19 on early builds, then 20.
         public const int DWMWA_USE_IMMERSIVE_DARK_MODE_OLD = 19;
