@@ -20,9 +20,10 @@ namespace WorkMode.Actions
 
     internal static class CommandRunner
     {
-        public static async Task<CommandResult> RunAsync(CustomAction action)
+        public static async Task<CommandResult> RunAsync(CustomAction action, Func<bool> confirmPythonInstallation = null)
         {
-            if (action.Type != CustomAction.BatchCommand)
+            if (action.Type != CustomAction.BatchCommand && action.Type != CustomAction.PythonCommand &&
+                action.Type != CustomAction.PowerShellCommand)
                 throw new NotSupportedException("Unsupported action type: " + action.Type);
             if (string.IsNullOrWhiteSpace(action.Command))
                 throw new ArgumentException("The command cannot be empty.");
@@ -33,20 +34,53 @@ namespace WorkMode.Actions
             if (!Directory.Exists(directory))
                 throw new DirectoryNotFoundException("Working folder not found: " + directory);
 
-            string script = Path.Combine(Path.GetTempPath(), "WorkMode-" + Guid.NewGuid().ToString("N") + ".bat");
+            string pythonExecutable = action.Type == CustomAction.PythonCommand
+                ? await PythonRuntime.EnsureAvailableAsync(confirmPythonInstallation) : null;
+            string extension = action.Type == CustomAction.BatchCommand ? ".bat" :
+                action.Type == CustomAction.PythonCommand ? ".py" : ".ps1";
+            string script = Path.Combine(Path.GetTempPath(), "WorkMode-" + Guid.NewGuid().ToString("N") + extension);
             bool terminalStarted = false;
             try
             {
-                // A script preserves cmd quoting, pipes and multiple command lines.
-                Encoding encoding = Encoding.GetEncoding(System.Globalization.CultureInfo.CurrentCulture.TextInfo.OEMCodePage);
-                File.WriteAllText(script, "@echo off\r\n" + action.Command + "\r\n", encoding);
+                Encoding encoding = action.Type == CustomAction.BatchCommand
+                    ? Encoding.GetEncoding(System.Globalization.CultureInfo.CurrentCulture.TextInfo.OEMCodePage)
+                    : new UTF8Encoding(false);
+                File.WriteAllText(script,
+                    (action.Type == CustomAction.BatchCommand ? "@echo off\r\n" : string.Empty) + action.Command + "\r\n",
+                    action.Type == CustomAction.PowerShellCommand ? new UTF8Encoding(true) : encoding);
+                string executable;
+                string arguments;
+                if (action.Type == CustomAction.BatchCommand)
+                {
+                    executable = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "cmd.exe");
+                    arguments = "/d /s /c \"\"" + script + "\"\"";
+                }
+                else if (action.Type == CustomAction.PythonCommand)
+                {
+                    executable = pythonExecutable;
+                    arguments = (Path.GetFileName(executable).Equals("py.exe", StringComparison.OrdinalIgnoreCase) ? "-3 " : "") +
+                        "-X utf8 -u \"" + script + "\"";
+                }
+                else
+                {
+                    executable = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System),
+                        @"WindowsPowerShell\v1.0\powershell.exe");
+                    // Hidden progress records are serialized to stderr by Windows PowerShell, even in text mode.
+                    string command = (action.OpenInTerminal ? "" : "$ProgressPreference = 'SilentlyContinue'; ") +
+                        "[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); & '" +
+                        script.Replace("'", "''") + "'; $succeeded = $?; " +
+                        "if ($null -ne $LASTEXITCODE) { exit $LASTEXITCODE }; if (-not $succeeded) { exit 1 }; exit 0";
+                    arguments = "-NoLogo -NoProfile -InputFormat Text -OutputFormat Text -ExecutionPolicy Bypass -EncodedCommand " +
+                        Convert.ToBase64String(Encoding.Unicode.GetBytes(command));
+                }
                 if (action.OpenInTerminal)
                 {
                     using (var terminal = Process.Start(new ProcessStartInfo
                     {
                         FileName = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "cmd.exe"),
-                        // The inner cmd isolates `exit` and the outer cmd cleans up even after script errors.
-                        Arguments = "/d /s /k \"cmd /d /s /c \"\"" + script + "\"\" & del \"" + script + "\"\"",
+                        // A separate interpreter isolates `exit`; the console owns cleanup after the app closes.
+                        Arguments = "/d /s " + (action.CloseTerminalAfterExecution ? "/c" : "/k") +
+                            " \"\"" + executable + "\" " + arguments + " & del \"" + script + "\"\"",
                         WorkingDirectory = directory,
                         UseShellExecute = true,
                         WindowStyle = ProcessWindowStyle.Normal
@@ -65,8 +99,8 @@ namespace WorkMode.Actions
                 {
                     process.StartInfo = new ProcessStartInfo
                     {
-                        FileName = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "cmd.exe"),
-                        Arguments = "/d /s /c \"\"" + script + "\"\"",
+                        FileName = executable,
+                        Arguments = arguments,
                         WorkingDirectory = directory,
                         UseShellExecute = false,
                         CreateNoWindow = true,

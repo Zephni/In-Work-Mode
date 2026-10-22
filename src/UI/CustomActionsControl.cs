@@ -75,7 +75,20 @@ namespace WorkMode.UI
                 row.SetRunning();
                 try
                 {
-                    CommandResult result = await CommandRunner.RunAsync(action);
+                    CommandResult result = await CommandRunner.RunAsync(action, () =>
+                    {
+                        if (IsDisposed || row.IsDisposed) return false;
+                        if (MessageBox.Show(this,
+                            "A working Python 3 installation was not found.\r\n\r\n" +
+                            "Install Python 3.14 for your Windows user using Windows Package Manager (winget)? " +
+                            "This requires internet access and accepts the Python package and winget source agreements.\r\n\r\n" +
+                            "An installation window will open. The action will run automatically after installation succeeds.",
+                            "Install Python 3", MessageBoxButtons.YesNo, MessageBoxIcon.Question,
+                            MessageBoxDefaultButton.Button2) != DialogResult.Yes)
+                            return false;
+                        row.SetRunning("Installing Python 3...");
+                        return true;
+                    });
                     if (IsDisposed || row.IsDisposed) return;
                     if (result.ExitCode != 0 || !string.IsNullOrWhiteSpace(result.Error))
                     {
@@ -88,12 +101,16 @@ namespace WorkMode.UI
                         row.SetSuccess(result.TerminalProcessId.HasValue);
                     }
                 }
+                catch (OperationCanceledException)
+                {
+                    if (!IsDisposed && !row.IsDisposed) row.SetCancelled();
+                }
                 catch (Exception error)
                 {
                     if (!(error is Win32Exception || error is IOException ||
                         error is UnauthorizedAccessException || error is ArgumentException ||
                         error is NotSupportedException || error is InvalidOperationException ||
-                        error is System.Security.SecurityException)) throw;
+                        error is System.Security.SecurityException || error is TimeoutException)) throw;
                     if (IsDisposed || row.IsDisposed) return;
                     row.SetError();
                     ShowError(action.Title, error.Message);

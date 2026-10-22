@@ -151,11 +151,13 @@ namespace WorkMode.Configuration
                         else if (keyName.Equals("Type", StringComparison.OrdinalIgnoreCase))
                             currentAction.Type = value;
                         else if (keyName.Equals("Command", StringComparison.OrdinalIgnoreCase))
-                            currentAction.Command = UnescapeNotes(value);
+                            currentAction.Command = UnescapeNotes(raw.Substring(raw.IndexOf('=') + 1));
                         else if (keyName.Equals("WorkingDirectory", StringComparison.OrdinalIgnoreCase))
                             currentAction.WorkingDirectory = UnescapeNotes(value);
                         else if (keyName.Equals("OpenInTerminal", StringComparison.OrdinalIgnoreCase))
                             currentAction.OpenInTerminal = string.Equals(value, "True", StringComparison.OrdinalIgnoreCase);
+                        else if (keyName.Equals("CloseTerminalAfterExecution", StringComparison.OrdinalIgnoreCase))
+                            currentAction.CloseTerminalAfterExecution = string.Equals(value, "True", StringComparison.OrdinalIgnoreCase);
                         continue;
                     }
 
@@ -301,6 +303,7 @@ namespace WorkMode.Configuration
                 {
                     sb.AppendLine("[CustomAction]");
                     sb.AppendLine("OpenInTerminal=" + action.OpenInTerminal);
+                    sb.AppendLine("CloseTerminalAfterExecution=" + action.CloseTerminalAfterExecution);
                     sb.AppendLine("Title=" + EscapeNotes(action.Title));
                     sb.AppendLine("Type=" + action.Type);
                     sb.AppendLine("Command=" + EscapeNotes(action.Command));

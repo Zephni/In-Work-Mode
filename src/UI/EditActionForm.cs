@@ -9,6 +9,9 @@ namespace WorkMode.UI
     {
         private readonly TextBox _title;
         private readonly ComboBox _type;
+        private readonly ComboBox _display;
+        private static readonly string[] Languages =
+            { CustomAction.BatchCommand, CustomAction.PythonCommand, CustomAction.PowerShellCommand };
         private readonly TextBox _command;
         private readonly TextBox _directory;
 
@@ -27,25 +30,34 @@ namespace WorkMode.UI
             MinimumSize = Size;
 
             _title = AddInput("Name", action.Title, 12, 28);
-            Controls.Add(new Label { Text = "Action type", AutoSize = true, Location = new Point(12, 76), ForeColor = Theme.TextMuted });
-            _type = new ComboBox
+            Controls.Add(new Label { Text = "Language", AutoSize = true, Location = new Point(12, 76), ForeColor = Theme.TextMuted });
+            Controls.Add(new Label { Text = "Display", AutoSize = true, Location = new Point(286, 76), ForeColor = Theme.TextMuted });
+            _type = AddSelect("Language", 12, 262);
+            _display = AddSelect("Display", 286, 262);
+            foreach (string language in Languages) _type.Items.Add(CustomAction.GetLanguageName(language));
+            int languageIndex = Array.IndexOf(Languages, action.Type);
+            if (languageIndex < 0)
             {
-                Location = new Point(12, 96), Width = ClientSize.Width - 24,
-                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
-                DropDownStyle = ComboBoxStyle.DropDownList, FlatStyle = FlatStyle.Flat,
-                BackColor = Theme.SurfaceAlt, ForeColor = Theme.Text,
-                Font = new Font("Segoe UI", 10f), DrawMode = DrawMode.OwnerDrawFixed,
-                ItemHeight = 24
+                _type.Items.Add(CustomAction.GetLanguageName(action.Type));
+                languageIndex = Languages.Length;
+            }
+            _type.SelectedIndex = languageIndex;
+            _display.Items.Add(CustomAction.TerminalCommandName);
+            _display.Items.Add(CustomAction.CloseTerminalCommandName);
+            _display.Items.Add(CustomAction.BackgroundCommandName);
+            _display.DropDownWidth = 340;
+            _display.SelectedIndex = action.OpenInTerminal ? (action.CloseTerminalAfterExecution ? 1 : 0) : 2;
+            Resize += (s, e) =>
+            {
+                int width = (ClientSize.Width - 36) / 2;
+                _type.Width = width;
+                _display.Left = width + 24;
+                _display.Width = ClientSize.Width - _display.Left - 12;
+                foreach (Control control in Controls)
+                    if (control is Label && control.Text == "Display") control.Left = _display.Left;
             };
-            _type.DrawItem += DrawActionType;
-            _type.Items.Add(CustomAction.TerminalCommandName);
-            _type.Items.Add(CustomAction.BackgroundCommandName);
-            if (action.Type != CustomAction.BatchCommand)
-                _type.Items.Add("Unsupported: " + action.Type);
-            _type.SelectedIndex = action.Type == CustomAction.BatchCommand ? (action.OpenInTerminal ? 0 : 1) : 2;
-            Controls.Add(_type);
 
-            _command = AddInput("Command (batch script)", action.Command, 132, 182);
+            _command = AddInput("Script", action.Command, 132, 182);
             _command.Multiline = true;
             _command.AcceptsReturn = true;
             _command.ScrollBars = ScrollBars.Vertical;
@@ -65,10 +77,12 @@ namespace WorkMode.UI
                 Location = new Point(12, 401), Size = new Size(ClientSize.Width - 24, 24), ForeColor = Theme.TextMuted,
                 Anchor = AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right
             };
-            Action updateHint = () => hint.Text = _type.SelectedIndex == 0
-                ? "Interactive input supported. The check icon confirms launch, not script completion."
-                : "Runs hidden without interactive input. Output and errors are captured by the app.";
-            _type.SelectedIndexChanged += (s, e) => updateHint();
+            Action updateHint = () => hint.Text = _display.SelectedIndex == 2
+                ? "Runs hidden without interactive input. Output and errors are captured by the app."
+                : _display.SelectedIndex == 1
+                    ? "Interactive input supported. Closes when the script exits, including on errors."
+                    : "Interactive input supported. The check icon confirms launch, not script completion.";
+            _display.SelectedIndexChanged += (s, e) => updateHint();
             updateHint();
             Controls.Add(hint);
 
@@ -86,17 +100,18 @@ namespace WorkMode.UI
                         MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     return;
                 }
-                if (_type.SelectedIndex < 0 || _type.SelectedIndex > 1)
+                if (_type.SelectedIndex < 0 || _type.SelectedIndex >= Languages.Length)
                 {
-                    MessageBox.Show(this, "Please select a supported action type.", "Custom Action",
+                    MessageBox.Show(this, "Please select a supported language.", "Custom Action",
                         MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     return;
                 }
                 Action = new CustomAction
                 {
-                    Title = _title.Text.Trim(), Type = CustomAction.BatchCommand,
-                    Command = _command.Text.Trim(), WorkingDirectory = _directory.Text.Trim(),
-                    OpenInTerminal = _type.SelectedIndex == 0
+                    Title = _title.Text.Trim(), Type = Languages[_type.SelectedIndex],
+                    Command = _command.Text, WorkingDirectory = _directory.Text.Trim(),
+                    OpenInTerminal = _display.SelectedIndex != 2,
+                    CloseTerminalAfterExecution = _display.SelectedIndex == 1
                 };
                 DialogResult = DialogResult.OK;
             };
@@ -113,16 +128,32 @@ namespace WorkMode.UI
             CancelButton = cancel;
         }
 
+        private ComboBox AddSelect(string name, int left, int width)
+        {
+            var select = new ComboBox
+            {
+                AccessibleName = name, Location = new Point(left, 96), Width = width,
+                DropDownStyle = ComboBoxStyle.DropDownList, FlatStyle = FlatStyle.Flat,
+                BackColor = Theme.SurfaceAlt, ForeColor = Theme.Text,
+                Font = new Font("Segoe UI", 10f), DrawMode = DrawMode.OwnerDrawFixed,
+                ItemHeight = 24
+            };
+            select.DrawItem += DrawActionType;
+            Controls.Add(select);
+            return select;
+        }
+
         private void DrawActionType(object sender, DrawItemEventArgs e)
         {
             if (e.Index < 0) return;
+            var select = (ComboBox)sender;
             bool selected = (e.State & DrawItemState.Selected) != 0 &&
                 (e.State & DrawItemState.ComboBoxEdit) == 0;
             using (var background = new SolidBrush(selected ? Theme.Accent : Theme.SurfaceAlt))
                 e.Graphics.FillRectangle(background, e.Bounds);
             Rectangle textBounds = e.Bounds;
             textBounds.Inflate(-6, 0);
-            TextRenderer.DrawText(e.Graphics, _type.Items[e.Index].ToString(), _type.Font,
+            TextRenderer.DrawText(e.Graphics, select.Items[e.Index].ToString(), select.Font,
                 textBounds, selected ? Color.White : Theme.Text,
                 TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis |
                 TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding);

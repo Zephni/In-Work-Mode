@@ -15,14 +15,28 @@ internal static class RegressionTests
     private static int _assertions;
 
     [STAThread]
-    private static int Main()
+    private static int Main(string[] args)
     {
+        string stubMode = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "runtime-stub.txt");
+        if (File.Exists(stubMode))
+        {
+            File.WriteAllText(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "stub-arguments.txt"), string.Join("\n", args));
+            string mode = File.ReadAllText(stubMode);
+            string name = Path.GetFileName(System.Reflection.Assembly.GetExecutingAssembly().Location);
+            if (name == "installer.exe") return mode == "install-failure" ? 23 : 0;
+            if (mode == "unusable" || (mode == "fallback" && name == "py.exe")) return 1;
+            Console.WriteLine(mode == "python2" ? "" : Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "python.exe"));
+            return 0;
+        }
+
         string directory = Path.Combine(Path.GetTempPath(), "WorkMode tests-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
         try
         {
             TestCommands(directory);
             TestTerminalCommands(directory);
+            TestPythonRuntime(directory);
+            TestScriptLanguages(directory);
             TestConfiguration(directory);
             Application.EnableVisualStyles();
             Control.CheckForIllegalCrossThreadCalls = true;
@@ -153,6 +167,211 @@ internal static class RegressionTests
                 terminal.WaitForExit();
             }
         }
+        foreach (string language in new[] { CustomAction.BatchCommand, CustomAction.PythonCommand, CustomAction.PowerShellCommand })
+            foreach (int exitCode in new[] { 0, 7 })
+            {
+                string marker = "close-terminal-" + language + "-" + exitCode + ".txt";
+                action.Type = language;
+                action.CloseTerminalAfterExecution = true;
+                action.Command = language == CustomAction.BatchCommand
+                    ? "echo %~f0>" + marker + "\r\nchoice /c 12 /t 1 /d 2 /n\r\nexit /b " + exitCode
+                    : language == CustomAction.PythonCommand
+                        ? "import sys, time\nfrom pathlib import Path\nPath('" + marker +
+                            "').write_text(__file__)\ntime.sleep(1)\nraise SystemExit(" + exitCode + ")"
+                        : "[IO.File]::WriteAllText((Join-Path $pwd '" + marker +
+                            "'), $PSCommandPath)\nStart-Sleep -Seconds 1\nexit " + exitCode;
+                result = CommandRunner.RunAsync(action).GetAwaiter().GetResult();
+                Assert(result.TerminalProcessId.HasValue && result.ExitCode == 0,
+                    language + " auto-closing terminal reports launch success");
+                using (var terminal = Process.GetProcessById(result.TerminalProcessId.Value))
+                {
+                    try
+                    {
+                        PumpUntil(() => File.Exists(Path.Combine(directory, marker)), 10000, language + " auto-close launch");
+                        string script = File.ReadAllText(Path.Combine(directory, marker)).Trim();
+                        Assert(File.Exists(script), language + " auto-close script survives during execution");
+                        Assert(terminal.WaitForExit(10000),
+                            language + " terminal closes after script exit " + exitCode);
+                        Assert(!File.Exists(script), language + " auto-close terminal cleans up its script");
+                    }
+                    finally
+                    {
+                        if (!terminal.HasExited) terminal.Kill();
+                        terminal.WaitForExit();
+                    }
+                }
+            }
+    }
+
+    private static void TestScriptLanguages(string directory)
+    {
+        foreach (string language in new[] { CustomAction.PythonCommand, CustomAction.PowerShellCommand })
+        {
+            bool python = language == CustomAction.PythonCommand;
+            var action = new CustomAction
+            {
+                Type = language, WorkingDirectory = directory,
+                Command = python ? "print('Success')" : "Write-Output 'Success'"
+            };
+            CommandResult result = CommandRunner.RunAsync(action).GetAwaiter().GetResult();
+            Assert(result.ExitCode == 0 && result.Output.Contains("Success") && result.Error.Length == 0,
+                language + " succeeds without spurious errors. Exit: " + result.ExitCode +
+                "; stdout: " + result.Output + "; stderr: " + result.Error);
+            action.Command = python
+                ? "print(__file__)" : "Write-Output $PSCommandPath";
+            result = CommandRunner.RunAsync(action).GetAwaiter().GetResult();
+            Assert(result.ExitCode == 0 && !File.Exists(result.Output.Trim()),
+                language + " cleans up hidden temporary scripts");
+            action.Command = python
+                    ? "import os, sys\nprint('Hello caf\\u00e9')\nprint(os.getcwd())\nprint('Failure details', file=sys.stderr)\nsys.exit(7)"
+                    : "Write-Output 'Hello caf\u00e9'\nWrite-Output (Get-Location).Path\n[Console]::Error.WriteLine('Failure details')\nexit 7";
+            result = CommandRunner.RunAsync(action).GetAwaiter().GetResult();
+            Assert(result.ExitCode == 7 && result.Output.Contains("Hello caf\u00e9") &&
+                result.Output.Contains(directory) && result.Error.Contains("Failure details"),
+                language + " captures UTF-8, working folder, exit status and stderr. Exit: " + result.ExitCode +
+                "; stdout: " + result.Output + "; stderr: " + result.Error);
+            action.Command = python
+                ? "import sys\nfor i in range(1500):\n print('Output ' + str(i)); print('Error ' + str(i), file=sys.stderr)"
+                : "1..1500 | ForEach-Object { [Console]::WriteLine('Output ' + $_); [Console]::Error.WriteLine('Error ' + $_) }";
+            result = CommandRunner.RunAsync(action).GetAwaiter().GetResult();
+            Assert(result.ExitCode == 0 && result.Output.Length > 10000 && result.Error.Length > 10000,
+                language + " drains both streams without deadlocks");
+            action.Command = python ? "if invalid syntax" : "throw 'Script failed'";
+            result = CommandRunner.RunAsync(action).GetAwaiter().GetResult();
+            Assert(result.ExitCode != 0 && result.Error.Length > 0, language + " reports script errors");
+
+            string marker = language + "-terminal.txt";
+            string scriptMarker = language + "-script.txt";
+            action.OpenInTerminal = true;
+            action.Command = python
+                ? "import sys, time\nfrom pathlib import Path\nPath('" + scriptMarker + "').write_text(__file__)\n" +
+                    "time.sleep(1)\nPath('" + marker + "').write_text(str(sys.stdin.isatty()) + ',' + str(sys.stdout.isatty()))\nsys.exit(7)"
+                : "[IO.File]::WriteAllText((Join-Path $pwd '" + scriptMarker + "'), $PSCommandPath)\n" +
+                    "Start-Sleep -Seconds 1\n[IO.File]::WriteAllText((Join-Path $pwd '" + marker +
+                    "'), [Console]::IsInputRedirected.ToString() + ',' + [Console]::IsOutputRedirected.ToString())\nexit 7";
+            result = CommandRunner.RunAsync(action).GetAwaiter().GetResult();
+            Assert(result.TerminalProcessId.HasValue, language + " opens an independent console");
+            using (var terminal = Process.GetProcessById(result.TerminalProcessId.Value))
+            {
+                try
+                {
+                    PumpUntil(() => File.Exists(Path.Combine(directory, scriptMarker)), 10000, language + " script launch");
+                    string script = File.ReadAllText(Path.Combine(directory, scriptMarker));
+                    Assert(File.Exists(script), language + " temporary script survives during execution");
+                    PumpUntil(() => File.Exists(Path.Combine(directory, marker)) && !File.Exists(script),
+                        10000, language + " completion and cleanup");
+                    Assert(File.ReadAllText(Path.Combine(directory, marker)) == (python ? "True,True" : "False,False"),
+                        language + " input and output are attached to a console");
+                    Assert(!terminal.HasExited, language + " console stays open after script failure");
+                }
+                finally
+                {
+                    if (!terminal.HasExited) terminal.Kill();
+                    terminal.WaitForExit();
+                }
+            }
+        }
+        Assert(PythonRuntime.FindExecutable(string.Empty) == null, "Empty search path does not find a Python runtime");
+    }
+
+    private static void TestPythonRuntime(string directory)
+    {
+        string folder = Path.Combine(directory, "Python runtime with spaces");
+        Directory.CreateDirectory(folder);
+        try
+        {
+            string assembly = System.Reflection.Assembly.GetExecutingAssembly().Location;
+            foreach (string name in new[] { "py.exe", "python.exe", "installer.exe" })
+                File.Copy(assembly, Path.Combine(folder, name));
+            string mode = Path.Combine(folder, "runtime-stub.txt");
+            string arguments = Path.Combine(folder, "stub-arguments.txt");
+            string python = Path.Combine(folder, "python.exe");
+            string installer = Path.Combine(folder, "installer.exe");
+            File.WriteAllText(mode, "valid");
+            Assert(PythonRuntime.FindExecutable("\"" + folder + "\";" + folder) == python,
+                "Quoted paths and launcher detection return the actual Python interpreter");
+            Assert(File.ReadAllText(arguments).StartsWith("-3\n-I\n-S\n-X\nutf8\n-c\n"),
+                "Launcher probes explicitly request isolated Python 3 with UTF-8 output");
+            File.WriteAllText(mode, "fallback");
+            Assert(PythonRuntime.FindExecutable(folder) == python,
+                "An unusable launcher falls back to a working python.exe");
+            Assert(!File.ReadAllText(arguments).StartsWith("-3\n"), "Direct Python does not receive launcher arguments");
+            File.WriteAllText(mode, "unusable");
+            Assert(PythonRuntime.FindExecutable(folder) == null, "Store aliases and broken interpreters do not count as Python");
+            File.WriteAllText(mode, "python2");
+            Assert(PythonRuntime.FindExecutable(folder) == null, "Python 2 does not count as Python 3");
+
+            bool prompted = false;
+            bool installed = false;
+            string found = PythonRuntime.EnsureAvailableAsync(
+                () => { prompted = true; return true; },
+                () => python,
+                () => { installed = true; return Task.FromResult(0); }).GetAwaiter().GetResult();
+            Assert(found == python && !prompted && !installed, "Existing Python is reused without prompting or installing");
+
+            int searches = 0;
+            try
+            {
+                PythonRuntime.EnsureAvailableAsync(() => false, () => { searches++; return null; },
+                    () => { installed = true; return Task.FromResult(0); }).GetAwaiter().GetResult();
+                throw new Exception("Declined installation was accepted.");
+            }
+            catch (OperationCanceledException) { _assertions++; }
+            Assert(searches == 1 && !installed, "Declining does not install Python or run a second search");
+            try
+            {
+                PythonRuntime.EnsureAvailableAsync(null, () => null, () => { installed = true; return Task.FromResult(0); })
+                    .GetAwaiter().GetResult();
+                throw new Exception("Missing Python without consent was accepted.");
+            }
+            catch (FileNotFoundException error)
+            {
+                Assert(error.Message.Contains("Install Python 3") && !installed, "Missing Python never installs without consent");
+            }
+
+            File.WriteAllText(mode, "valid");
+            searches = 0;
+            found = PythonRuntime.EnsureAvailableAsync(
+                () => { prompted = true; return true; },
+                () => { searches++; return installed ? PythonRuntime.FindExecutable(folder) : null; },
+                async () => { await PythonRuntime.InstallAsync(installer); installed = true; }).GetAwaiter().GetResult();
+            Assert(found == python && prompted && installed && searches == 2,
+                "Successful installation rechecks Python and returns the interpreter for the pending action");
+            // The subsequent probe overwrites the stub arguments, so check the installer separately.
+            PythonRuntime.InstallAsync(installer).GetAwaiter().GetResult();
+            string installArguments = File.ReadAllText(arguments);
+            Assert(installArguments == "install\n--id\n" + PythonRuntime.PackageId +
+                "\n--exact\n--source\nwinget\n--scope\nuser\n--accept-package-agreements\n--accept-source-agreements\n--disable-interactivity",
+                "Installation targets only the official per-user Python package and explicit winget source");
+            try
+            {
+                PythonRuntime.EnsureAvailableAsync(() => true, () => null, () => Task.FromResult(0)).GetAwaiter().GetResult();
+                throw new Exception("An installation without a working interpreter was accepted.");
+            }
+            catch (FileNotFoundException error)
+            {
+                Assert(error.Message.Contains("installation finished") && error.Message.Contains("PATH"),
+                    "Installer success is not treated as runtime success without verification");
+            }
+            File.WriteAllText(mode, "install-failure");
+            searches = 0;
+            try
+            {
+                PythonRuntime.EnsureAvailableAsync(() => true, () => { searches++; return null; },
+                    () => PythonRuntime.InstallAsync(installer)).GetAwaiter().GetResult();
+                throw new Exception("A failed installer was accepted.");
+            }
+            catch (InvalidOperationException error)
+            {
+                Assert(error.Message.Contains("23 (0x00000017)") && searches == 1,
+                    "Installer failures report their exit code and do not run the pending action");
+            }
+        }
+        finally
+        {
+            foreach (string file in Directory.GetFiles(folder)) File.Delete(file);
+            Directory.Delete(folder);
+        }
     }
 
     private static void TestConfiguration(string directory)
@@ -179,7 +398,25 @@ internal static class RegressionTests
         Assert(loaded.CustomActions[0].WorkingDirectory == directory, "Working folder round trip");
         Assert(loaded.CustomActions[0].OpenInTerminal && !loaded.CustomActions[1].OpenInTerminal,
             "Terminal and hidden modes round trip independently");
+        Assert(!loaded.CustomActions[0].CloseTerminalAfterExecution,
+            "Existing terminal actions stay open by default");
         Assert(loaded.CustomActions[1].Type == "future", "Unknown action type preserved");
+        foreach (string language in new[] { CustomAction.PythonCommand, CustomAction.PowerShellCommand })
+            foreach (int display in new[] { 0, 1, 2 })
+                config.CustomActions.Add(new CustomAction
+                {
+                    Title = language, Type = language, OpenInTerminal = display != 2,
+                    CloseTerminalAfterExecution = display == 1,
+                    Command = "  indented script\r\nsecond line", WorkingDirectory = directory
+                });
+        config.SaveOrThrow();
+        var languages = AppConfig.Load(path);
+        for (int i = 2; i < config.CustomActions.Count; i++)
+            Assert(languages.CustomActions[i].Type == config.CustomActions[i].Type &&
+                languages.CustomActions[i].OpenInTerminal == config.CustomActions[i].OpenInTerminal &&
+                languages.CustomActions[i].CloseTerminalAfterExecution == config.CustomActions[i].CloseTerminalAfterExecution &&
+                languages.CustomActions[i].Command == config.CustomActions[i].Command,
+                "Language, display and script whitespace round trip");
         loaded.CustomActions.RemoveAt(0);
         loaded.CustomActions[0].Title = "Edited";
         loaded.SaveOrThrow();
@@ -247,7 +484,7 @@ internal static class RegressionTests
                     Assert(row.Height == 56 && Find<AddWorkspaceRow>(page, c => c.Text == "Add Custom Action") != null,
                         "Custom actions use workspace-sized cards and the shared add card");
                     int uiThread = Thread.CurrentThread.ManagedThreadId;
-                    Find<Label>(row, c => c.Text == CustomAction.BackgroundCommandName).TextChanged += (s, e) => Assert(Thread.CurrentThread.ManagedThreadId == uiThread,
+                    Find<Label>(row, c => c.Text == config.CustomActions[0].Description).TextChanged += (s, e) => Assert(Thread.CurrentThread.ManagedThreadId == uiThread,
                         "Run feedback must be updated on the UI thread");
                     run.PerformClick();
                     Assert(page.IsRunning && !run.Enabled, "Running state disables duplicate execution");
@@ -258,9 +495,9 @@ internal static class RegressionTests
                     PumpUntil(() => !page.IsRunning, 10000, "second command completion");
                     Assert(run.Image != null, "Immediate rerun has a success icon");
                     var feedbackTime = Stopwatch.StartNew();
-                    PumpUntil(() => row.StatusText == CustomAction.BackgroundCommandName, 5000, "success icon to clear");
+                    PumpUntil(() => row.StatusText == config.CustomActions[0].Description, 5000, "success icon to clear");
                     Assert(feedbackTime.ElapsedMilliseconds >= 3400, "Success feedback lasts 3.5 seconds");
-                    Assert(run.Image != null && row.StatusText == CustomAction.BackgroundCommandName, "Success feedback resets to play icon after interval");
+                    Assert(run.Image != null && row.StatusText == config.CustomActions[0].Description, "Success feedback resets to play icon after interval");
                     workspace.Sync();
                     Assert(workspace.ElapsedSeconds >= 3, "Timer advances while Custom Actions is active");
 
@@ -273,16 +510,29 @@ internal static class RegressionTests
                     config.CustomActions[0].WorkingDirectory = directory;
                     config.CustomActions[0].Command = "echo Done";
 
+                    using (var cancelledRow = new CustomActionRow(new CustomAction()))
+                    {
+                        cancelledRow.SetRunning("Installing Python 3...");
+                        Assert(cancelledRow.StatusText == "Installing Python 3...", "Installation has distinct running feedback");
+                        cancelledRow.SetCancelled();
+                        Assert(cancelledRow.StatusText == "Cancelled" && cancelledRow.RunButton.Image != null,
+                            "Declined installation restores the play icon without claiming success");
+                    }
+
                     using (var dialog = new EditActionForm(null))
                     {
                         dialog.Show(form);
                         Application.DoEvents();
-                        ComboBox type = Find<ComboBox>(dialog, c => true);
+                        ComboBox language = Find<ComboBox>(dialog, c => c.AccessibleName == "Language");
+                        ComboBox type = Find<ComboBox>(dialog, c => c.AccessibleName == "Display");
+                        Assert(language.Items.Count == 3 && language.Text == "Batch", "Language has three choices and defaults to batch");
                         Assert(type.SelectedIndex == 0 && type.Text == "Open in terminal",
                             "Open in terminal is the first and default option for new actions");
-                        Assert(type.Items.Count == 2 && type.Items[1].ToString() == "Run in background",
-                            "Background execution has a descriptive second option");
-                        Assert(Find<CheckBox>(dialog, c => true) == null, "Mode is selected through one dropdown");
+                        Assert(type.Items.Count == 3 && type.Items[2].ToString() == "Run in background",
+                            "Background execution has a descriptive third option");
+                        Assert(type.Items[1].ToString() == CustomAction.CloseTerminalCommandName,
+                            "Auto-closing terminal is the second display option");
+                        Assert(Find<CheckBox>(dialog, c => true) == null, "Mode and language use separate dropdowns");
                         Assert(dialog.BackColor == Theme.Background, "Action editor uses the dark theme");
                         TextBox command = Find<TextBox>(dialog, c => c.Multiline);
                         TextBox name = Find<TextBox>(dialog, c => !c.Multiline && !c.Anchor.HasFlag(AnchorStyles.Bottom));
@@ -315,36 +565,67 @@ internal static class RegressionTests
                     }
                     using (var dialog = new EditActionForm(new CustomAction { OpenInTerminal = true }))
                     {
-                        Assert(Find<ComboBox>(dialog, c => true).SelectedIndex == 0, "Editing restores the terminal option");
+                        Assert(Find<ComboBox>(dialog, c => c.AccessibleName == "Display").SelectedIndex == 0, "Editing restores the terminal option");
                     }
                     using (var dialog = new EditActionForm(config.CustomActions[0]))
                     {
                         dialog.Show(form);
-                        ComboBox type = Find<ComboBox>(dialog, c => true);
-                        Assert(type.SelectedIndex == 1, "Editing preserves existing background actions");
+                        ComboBox type = Find<ComboBox>(dialog, c => c.AccessibleName == "Display");
+                        Assert(type.SelectedIndex == 2, "Editing preserves existing background actions");
                         type.SelectedIndex = 0;
                         Assert(Find<Label>(dialog, c => c.Text.StartsWith("Interactive input")) != null,
                             "Terminal selection shows the interactive hint");
-                        type.SelectedIndex = 1;
+                        type.SelectedIndex = 2;
                         Assert(Find<Label>(dialog, c => c.Text.StartsWith("Runs hidden")) != null,
                             "Background selection shows the hidden execution hint");
+                        Find<ComboBox>(dialog, c => c.AccessibleName == "Language").SelectedIndex = 1;
+                        Assert(type.SelectedIndex == 2, "Changing language preserves display selection");
                         Find<Button>(dialog, b => b.Text == "Save").PerformClick();
                         Assert(dialog.Action != null && !dialog.Action.OpenInTerminal &&
-                            dialog.Action.Type == CustomAction.BatchCommand,
-                            "Background option saves the existing batch action format");
+                            dialog.Action.Type == CustomAction.PythonCommand,
+                            "Language and display selections save independently");
                     }
                     using (var dialog = new EditActionForm(new CustomAction { Type = "future" }))
                     {
                         ComboBox type = Find<ComboBox>(dialog, c => true);
-                        Assert(type.SelectedIndex == 2 && type.Text == "Unsupported: future",
+                        Assert(type.SelectedIndex == 3 && type.Text == "Unsupported: future",
                             "Unknown action types are not silently converted to a supported mode");
                     }
                     using (var terminalRow = new CustomActionRow(new CustomAction { OpenInTerminal = true }))
                     {
-                        Assert(terminalRow.StatusText == "Open in terminal", "Terminal actions use the same descriptive name on cards");
+                        Assert(terminalRow.StatusText == "Batch - Open in terminal", "Cards show language and display mode");
                         terminalRow.SetSuccess(true);
                         Assert(terminalRow.StatusText == "Opened in terminal", "Terminal feedback confirms launch only");
                     }
+                    using (var terminalRow = new CustomActionRow(new CustomAction
+                    {
+                        OpenInTerminal = true, CloseTerminalAfterExecution = true
+                    }))
+                    {
+                        Assert(terminalRow.StatusText == "Batch - " + CustomAction.CloseTerminalCommandName,
+                            "Cards distinguish auto-closing terminals");
+                    }
+                    foreach (string language in new[] { CustomAction.BatchCommand, CustomAction.PythonCommand, CustomAction.PowerShellCommand })
+                        foreach (int display in new[] { 0, 1, 2 })
+                            using (var dialog = new EditActionForm(new CustomAction
+                            {
+                                Title = "Script", Type = language, OpenInTerminal = display != 2,
+                                CloseTerminalAfterExecution = display == 1, Command = "\r\nprint('test')\r\n"
+                            }))
+                            {
+                                dialog.Show(form);
+                                Assert(Find<ComboBox>(dialog, c => c.AccessibleName == "Language").Text ==
+                                    CustomAction.GetLanguageName(language), "Editor restores script language");
+                                Assert(Find<ComboBox>(dialog, c => c.AccessibleName == "Display").SelectedIndex ==
+                                    display, "Editor restores display independently");
+                                if (display == 1)
+                                    Assert(Find<Label>(dialog, c => c.Text.Contains("Closes when the script exits")) != null,
+                                        "Auto-close selection explains terminal lifetime");
+                                Find<Button>(dialog, b => b.Text == "Save").PerformClick();
+                                Assert(dialog.Action.Type == language && dialog.Action.OpenInTerminal == (display != 2) &&
+                                    dialog.Action.CloseTerminalAfterExecution == (display == 1) &&
+                                    dialog.Action.Command == "\r\nprint('test')\r\n", "Editor preserves language, display and script whitespace");
+                            }
 
                     string screenshot = Environment.GetEnvironmentVariable("WORKMODE_TEST_SCREENSHOT");
                     if (!string.IsNullOrEmpty(screenshot))

@@ -96,10 +96,10 @@ namespace WorkMode.UI
             if (previous != null) previous.Dispose();
         }
 
-        public void SetRunning()
+        public void SetRunning(string message = "Running...")
         {
             _feedbackTimer.Stop();
-            _status.Text = "Running...";
+            _status.Text = message;
             _status.ForeColor = Theme.Accent;
             SetIcon(Glyphs.Clock(20, Color.White));
         }
@@ -119,12 +119,18 @@ namespace WorkMode.UI
             SetIcon(Glyphs.Info(20, Color.White));
         }
 
+        public void SetCancelled()
+        {
+            _status.Text = "Cancelled";
+            _status.ForeColor = Theme.TextMuted;
+            SetIcon(Glyphs.Play(20, Color.White));
+            _feedbackTimer.Start();
+        }
+
         private void ResetFeedback(CustomAction action)
         {
             _feedbackTimer.Stop();
-            _status.Text = action.Type == CustomAction.BatchCommand
-                ? (action.OpenInTerminal ? CustomAction.TerminalCommandName : CustomAction.BackgroundCommandName)
-                : action.Type;
+            _status.Text = action.Description;
             _status.ForeColor = Theme.TextMuted;
             SetIcon(Glyphs.Play(20, Color.White));
         }
