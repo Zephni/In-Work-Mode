@@ -154,6 +154,8 @@ namespace WorkMode.Configuration
                             currentAction.Command = UnescapeNotes(value);
                         else if (keyName.Equals("WorkingDirectory", StringComparison.OrdinalIgnoreCase))
                             currentAction.WorkingDirectory = UnescapeNotes(value);
+                        else if (keyName.Equals("OpenInTerminal", StringComparison.OrdinalIgnoreCase))
+                            currentAction.OpenInTerminal = string.Equals(value, "True", StringComparison.OrdinalIgnoreCase);
                         continue;
                     }
 
@@ -298,6 +300,7 @@ namespace WorkMode.Configuration
                 foreach (CustomAction action in CustomActions)
                 {
                     sb.AppendLine("[CustomAction]");
+                    sb.AppendLine("OpenInTerminal=" + action.OpenInTerminal);
                     sb.AppendLine("Title=" + EscapeNotes(action.Title));
                     sb.AppendLine("Type=" + action.Type);
                     sb.AppendLine("Command=" + EscapeNotes(action.Command));

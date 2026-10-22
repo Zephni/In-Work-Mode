@@ -17,11 +17,12 @@ internal static class RegressionTests
     [STAThread]
     private static int Main()
     {
-        string directory = Path.Combine(Path.GetTempPath(), "WorkMode-tests-" + Guid.NewGuid().ToString("N"));
+        string directory = Path.Combine(Path.GetTempPath(), "WorkMode tests-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
         try
         {
             TestCommands(directory);
+            TestTerminalCommands(directory);
             TestConfiguration(directory);
             Application.EnableVisualStyles();
             Control.CheckForIllegalCrossThreadCalls = true;
@@ -114,16 +115,59 @@ internal static class RegressionTests
         catch (NotSupportedException) { _assertions++; }
     }
 
+    private static void TestTerminalCommands(string directory)
+    {
+        var action = new CustomAction
+        {
+            Title = "Interactive terminal", WorkingDirectory = directory, OpenInTerminal = true,
+            Command = "echo %~f0>terminal-script.txt\r\n" +
+                "powershell.exe -NoProfile -Command \"[IO.File]::WriteAllText('console-io.txt', [Console]::IsInputRedirected.ToString() + ',' + [Console]::IsOutputRedirected.ToString())\"\r\n" +
+                "choice /c 12 /t 2 /d 2 /n\r\n" +
+                "if errorlevel 2 goto selected\r\nexit /b 9\r\n" +
+                ":selected\r\necho %CD%>terminal-complete.txt\r\nexit /b 7"
+        };
+        var watch = Stopwatch.StartNew();
+        CommandResult result = CommandRunner.RunAsync(action).GetAwaiter().GetResult();
+        Assert(result.TerminalProcessId.HasValue && result.ExitCode == 0 && result.Error.Length == 0,
+            "Terminal launch returns success and an independent process");
+        using (var terminal = Process.GetProcessById(result.TerminalProcessId.Value))
+        {
+            try
+            {
+                Assert(watch.ElapsedMilliseconds < 2000 && !File.Exists(Path.Combine(directory, "terminal-complete.txt")),
+                    "Launching a terminal does not wait for its script");
+                PumpUntil(() => File.Exists(Path.Combine(directory, "console-io.txt")), 10000, "console I/O check");
+                string script = File.ReadAllText(Path.Combine(directory, "terminal-script.txt")).Trim();
+                Assert(File.Exists(script), "Temporary batch survives while the script is running");
+                Assert(File.ReadAllText(Path.Combine(directory, "console-io.txt")) == "False,False",
+                    "Terminal input and output are attached to a real console");
+                PumpUntil(() => File.Exists(Path.Combine(directory, "terminal-complete.txt")) && !File.Exists(script),
+                    10000, "terminal script completion and cleanup");
+                Assert(File.ReadAllText(Path.Combine(directory, "terminal-complete.txt")).Trim() == directory,
+                    "Interactive choice, goto, and working folder work in the new terminal");
+                Assert(!terminal.HasExited, "Terminal remains open after a non-zero script exit");
+            }
+            finally
+            {
+                if (!terminal.HasExited) terminal.Kill();
+                terminal.WaitForExit();
+            }
+        }
+    }
+
     private static void TestConfiguration(string directory)
     {
         string path = Path.Combine(directory, "config.ini");
-        File.WriteAllText(path, "[Window]\r\nWidth=740\r\nHeight=420\r\n[Workspace]\r\nTitle=Existing\r\nSeconds=42\r\nNotes=Notes\r\n");
+        File.WriteAllText(path, "[Window]\r\nWidth=740\r\nHeight=420\r\n[Workspace]\r\nTitle=Existing\r\nSeconds=42\r\nNotes=Notes\r\n" +
+            "[CustomAction]\r\nTitle=Legacy action\r\nCommand=echo Legacy\r\n");
         var config = AppConfig.Load(path);
         Assert(config.Workspaces.Count == 1 && config.Workspaces[0].ElapsedSeconds == 42, "Old configuration loaded");
+        Assert(!config.CustomActions[0].OpenInTerminal, "Existing actions remain hidden by default");
+        config.CustomActions.Clear();
         config.CustomActions.Add(new CustomAction
         {
             Title = "Build = test", Command = "echo C:\\new\\folder\r\necho [Workspace]\r\nexit /b 3",
-            WorkingDirectory = directory
+            WorkingDirectory = directory, OpenInTerminal = true
         });
         config.CustomActions.Add(new CustomAction { Title = "Second", Type = "future", Command = "echo second" });
         config.SaveOrThrow();
@@ -133,6 +177,8 @@ internal static class RegressionTests
         Assert(loaded.CustomActions.Count == 2, "Multiple actions persisted including last section");
         Assert(loaded.CustomActions[0].Command == config.CustomActions[0].Command, "Multiline command and backslashes round trip");
         Assert(loaded.CustomActions[0].WorkingDirectory == directory, "Working folder round trip");
+        Assert(loaded.CustomActions[0].OpenInTerminal && !loaded.CustomActions[1].OpenInTerminal,
+            "Terminal and hidden modes round trip independently");
         Assert(loaded.CustomActions[1].Type == "future", "Unknown action type preserved");
         loaded.CustomActions.RemoveAt(0);
         loaded.CustomActions[0].Title = "Edited";
@@ -201,7 +247,7 @@ internal static class RegressionTests
                     Assert(row.Height == 56 && Find<AddWorkspaceRow>(page, c => c.Text == "Add Custom Action") != null,
                         "Custom actions use workspace-sized cards and the shared add card");
                     int uiThread = Thread.CurrentThread.ManagedThreadId;
-                    Find<Label>(row, c => c.Text == ".bat command").TextChanged += (s, e) => Assert(Thread.CurrentThread.ManagedThreadId == uiThread,
+                    Find<Label>(row, c => c.Text == CustomAction.BackgroundCommandName).TextChanged += (s, e) => Assert(Thread.CurrentThread.ManagedThreadId == uiThread,
                         "Run feedback must be updated on the UI thread");
                     run.PerformClick();
                     Assert(page.IsRunning && !run.Enabled, "Running state disables duplicate execution");
@@ -212,9 +258,9 @@ internal static class RegressionTests
                     PumpUntil(() => !page.IsRunning, 10000, "second command completion");
                     Assert(run.Image != null, "Immediate rerun has a success icon");
                     var feedbackTime = Stopwatch.StartNew();
-                    PumpUntil(() => row.StatusText == ".bat command", 5000, "success icon to clear");
+                    PumpUntil(() => row.StatusText == CustomAction.BackgroundCommandName, 5000, "success icon to clear");
                     Assert(feedbackTime.ElapsedMilliseconds >= 3400, "Success feedback lasts 3.5 seconds");
-                    Assert(run.Image != null && row.StatusText == ".bat command", "Success feedback resets to play icon after interval");
+                    Assert(run.Image != null && row.StatusText == CustomAction.BackgroundCommandName, "Success feedback resets to play icon after interval");
                     workspace.Sync();
                     Assert(workspace.ElapsedSeconds >= 3, "Timer advances while Custom Actions is active");
 
@@ -232,9 +278,23 @@ internal static class RegressionTests
                         dialog.Show(form);
                         Application.DoEvents();
                         ComboBox type = Find<ComboBox>(dialog, c => true);
-                        Assert(type.SelectedIndex == 0 && type.Text == ".bat command", "Batch command type selected by default");
+                        Assert(type.SelectedIndex == 0 && type.Text == "Open in terminal",
+                            "Open in terminal is the first and default option for new actions");
+                        Assert(type.Items.Count == 2 && type.Items[1].ToString() == "Run in background",
+                            "Background execution has a descriptive second option");
+                        Assert(Find<CheckBox>(dialog, c => true) == null, "Mode is selected through one dropdown");
                         Assert(dialog.BackColor == Theme.Background, "Action editor uses the dark theme");
                         TextBox command = Find<TextBox>(dialog, c => c.Multiline);
+                        TextBox name = Find<TextBox>(dialog, c => !c.Multiline && !c.Anchor.HasFlag(AnchorStyles.Bottom));
+                        Assert(type.Font.Name == name.Font.Name && type.Font.Size == name.Font.Size &&
+                            type.BackColor == name.BackColor && type.ForeColor == name.ForeColor,
+                            "Dropdown matches standard input typography and colors");
+                        Assert(type.DrawMode == DrawMode.OwnerDrawFixed && type.ItemHeight >= type.Font.Height + 6 &&
+                            type.Height >= name.Height && type.Bottom < command.Top - 20,
+                            "Dropdown has padded rows and does not overlap the command label");
+                        type.DroppedDown = true;
+                        Application.DoEvents();
+                        type.DroppedDown = false;
                         Size commandSize = command.Size;
                         TextBox directoryBox = Find<TextBox>(dialog, c => !c.Multiline && c.Anchor.HasFlag(AnchorStyles.Bottom));
                         int folderTop = directoryBox.Top;
@@ -246,7 +306,44 @@ internal static class RegressionTests
                             "Command input grows in both dimensions");
                         Assert(directoryBox.Top == folderTop + 150 && command.Bottom < directoryBox.Top,
                             "Folder and buttons remain below the growing command input");
+                        name.Text = "SSH menu";
+                        command.Text = "echo Interactive";
+                        Find<Button>(dialog, b => b.Text == "Save").PerformClick();
+                        Assert(dialog.Action != null && dialog.Action.OpenInTerminal,
+                            "Action editor saves the terminal option");
                         dialog.Close();
+                    }
+                    using (var dialog = new EditActionForm(new CustomAction { OpenInTerminal = true }))
+                    {
+                        Assert(Find<ComboBox>(dialog, c => true).SelectedIndex == 0, "Editing restores the terminal option");
+                    }
+                    using (var dialog = new EditActionForm(config.CustomActions[0]))
+                    {
+                        dialog.Show(form);
+                        ComboBox type = Find<ComboBox>(dialog, c => true);
+                        Assert(type.SelectedIndex == 1, "Editing preserves existing background actions");
+                        type.SelectedIndex = 0;
+                        Assert(Find<Label>(dialog, c => c.Text.StartsWith("Interactive input")) != null,
+                            "Terminal selection shows the interactive hint");
+                        type.SelectedIndex = 1;
+                        Assert(Find<Label>(dialog, c => c.Text.StartsWith("Runs hidden")) != null,
+                            "Background selection shows the hidden execution hint");
+                        Find<Button>(dialog, b => b.Text == "Save").PerformClick();
+                        Assert(dialog.Action != null && !dialog.Action.OpenInTerminal &&
+                            dialog.Action.Type == CustomAction.BatchCommand,
+                            "Background option saves the existing batch action format");
+                    }
+                    using (var dialog = new EditActionForm(new CustomAction { Type = "future" }))
+                    {
+                        ComboBox type = Find<ComboBox>(dialog, c => true);
+                        Assert(type.SelectedIndex == 2 && type.Text == "Unsupported: future",
+                            "Unknown action types are not silently converted to a supported mode");
+                    }
+                    using (var terminalRow = new CustomActionRow(new CustomAction { OpenInTerminal = true }))
+                    {
+                        Assert(terminalRow.StatusText == "Open in terminal", "Terminal actions use the same descriptive name on cards");
+                        terminalRow.SetSuccess(true);
+                        Assert(terminalRow.StatusText == "Opened in terminal", "Terminal feedback confirms launch only");
                     }
 
                     string screenshot = Environment.GetEnvironmentVariable("WORKMODE_TEST_SCREENSHOT");

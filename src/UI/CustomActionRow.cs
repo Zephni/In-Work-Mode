@@ -104,9 +104,9 @@ namespace WorkMode.UI
             SetIcon(Glyphs.Clock(20, Color.White));
         }
 
-        public void SetSuccess()
+        public void SetSuccess(bool launchedInTerminal = false)
         {
-            _status.Text = "Ran successfully";
+            _status.Text = launchedInTerminal ? "Opened in terminal" : "Ran successfully";
             _status.ForeColor = Theme.Accent;
             SetIcon(Glyphs.Check(20, Color.White));
             _feedbackTimer.Start();
@@ -122,7 +122,9 @@ namespace WorkMode.UI
         private void ResetFeedback(CustomAction action)
         {
             _feedbackTimer.Stop();
-            _status.Text = action.Type == CustomAction.BatchCommand ? ".bat command" : action.Type;
+            _status.Text = action.Type == CustomAction.BatchCommand
+                ? (action.OpenInTerminal ? CustomAction.TerminalCommandName : CustomAction.BackgroundCommandName)
+                : action.Type;
             _status.ForeColor = Theme.TextMuted;
             SetIcon(Glyphs.Play(20, Color.White));
         }

@@ -85,7 +85,7 @@ namespace WorkMode.UI
                     }
                     else
                     {
-                        row.SetSuccess();
+                        row.SetSuccess(result.TerminalProcessId.HasValue);
                     }
                 }
                 catch (Exception error)

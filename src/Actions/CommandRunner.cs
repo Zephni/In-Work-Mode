@@ -15,6 +15,7 @@ namespace WorkMode.Actions
         public int ExitCode { get; set; }
         public string Output { get; set; }
         public string Error { get; set; }
+        public int? TerminalProcessId { get; set; }
     }
 
     internal static class CommandRunner
@@ -33,11 +34,33 @@ namespace WorkMode.Actions
                 throw new DirectoryNotFoundException("Working folder not found: " + directory);
 
             string script = Path.Combine(Path.GetTempPath(), "WorkMode-" + Guid.NewGuid().ToString("N") + ".bat");
+            bool terminalStarted = false;
             try
             {
                 // A script preserves cmd quoting, pipes and multiple command lines.
                 Encoding encoding = Encoding.GetEncoding(System.Globalization.CultureInfo.CurrentCulture.TextInfo.OEMCodePage);
                 File.WriteAllText(script, "@echo off\r\n" + action.Command + "\r\n", encoding);
+                if (action.OpenInTerminal)
+                {
+                    using (var terminal = Process.Start(new ProcessStartInfo
+                    {
+                        FileName = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "cmd.exe"),
+                        // The inner cmd isolates `exit` and the outer cmd cleans up even after script errors.
+                        Arguments = "/d /s /k \"cmd /d /s /c \"\"" + script + "\"\" & del \"" + script + "\"\"",
+                        WorkingDirectory = directory,
+                        UseShellExecute = true,
+                        WindowStyle = ProcessWindowStyle.Normal
+                    }))
+                    {
+                        if (terminal == null) throw new InvalidOperationException("Could not open the command terminal.");
+                        terminalStarted = true;
+                        return new CommandResult
+                        {
+                            ExitCode = 0, Output = string.Empty, Error = string.Empty,
+                            TerminalProcessId = terminal.Id
+                        };
+                    }
+                }
                 using (var process = new Process())
                 {
                     process.StartInfo = new ProcessStartInfo
@@ -62,7 +85,7 @@ namespace WorkMode.Actions
             }
             finally
             {
-                File.Delete(script);
+                if (!terminalStarted) File.Delete(script);
             }
         }
 
