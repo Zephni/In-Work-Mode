@@ -74,7 +74,10 @@ namespace WorkMode.UI
             };
             var trackingTab = new Button { Text = "Time Tracking", Size = new Size(134, 34), Margin = new Padding(0, 0, 6, 0) };
             var actionsTab = new Button { Text = "Custom Actions", Size = new Size(142, 34), Margin = new Padding(0) };
-            trackingTab.TextImageRelation = actionsTab.TextImageRelation = TextImageRelation.ImageBeforeText;
+            trackingTab.TextImageRelation = actionsTab.TextImageRelation = TextImageRelation.Overlay;
+            trackingTab.ImageAlign = actionsTab.ImageAlign = ContentAlignment.MiddleLeft;
+            trackingTab.TextAlign = actionsTab.TextAlign = ContentAlignment.MiddleRight;
+            trackingTab.Padding = actionsTab.Padding = new Padding(10, 0, 10, 0);
             trackingTab.Disposed += (s, e) => { if (trackingTab.Image != null) trackingTab.Image.Dispose(); };
             actionsTab.Disposed += (s, e) => { if (actionsTab.Image != null) actionsTab.Image.Dispose(); };
             trackingTab.AccessibleRole = actionsTab.AccessibleRole = AccessibleRole.PageTab;
@@ -258,27 +261,8 @@ namespace WorkMode.UI
             var draggedRow = sender as WorkspaceControl;
             if (draggedRow == null || draggedRow.Parent != _list) return;
 
-            Point pointer = _list.PointToClient(Cursor.Position);
-            int currentIndex = _list.Controls.GetChildIndex(draggedRow);
-            int targetIndex = _list.Controls.Count - 2;
-
-            foreach (Control control in _list.Controls)
-            {
-                var row = control as WorkspaceControl;
-                if (row == null || row == draggedRow) continue;
-                if (pointer.Y < row.Top + row.Height / 2)
-                {
-                    targetIndex = _list.Controls.GetChildIndex(row);
-                    break;
-                }
-            }
-
-            if (currentIndex < targetIndex) targetIndex--;
-            if (targetIndex != currentIndex)
-            {
-                _list.Controls.SetChildIndex(draggedRow, targetIndex);
-                PinFooterRows();
-            }
+            RowReorderBehavior.MoveRow(_list, draggedRow, 2, _list.PointToClient(Cursor.Position));
+            PinFooterRows();
         }
 
         private void OnWorkspaceReorderCompleted(object sender, EventArgs e)

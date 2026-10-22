@@ -23,14 +23,8 @@ namespace WorkMode.UI
         private readonly Button _notesButton;
         private readonly Button _deleteButton;
         private readonly ToolTip _tooltip;
-        private readonly Timer _dragHoldTimer;
+        private readonly RowReorderBehavior _reorder;
         private bool _hover;
-        private Point _dragStart;
-        private Point _dragPreviewOffset;
-        private bool _dragPending;
-        private bool _dragReady;
-        private bool _dragging;
-        private DragPreviewForm _dragPreview;
         private NotesForm _notesForm;
 
         // Raised when the user toggles this workspace's timer on or off.
@@ -130,9 +124,6 @@ namespace WorkMode.UI
             _tooltip.SetToolTip(_notesButton, "Notes");
             _tooltip.SetToolTip(_deleteButton, "Delete");
 
-            _dragHoldTimer = new Timer { Interval = 50 };
-            _dragHoldTimer.Tick += OnDragHoldElapsed;
-
             Controls.Add(_titleLabel);
             Controls.Add(_timeLabel);
             Controls.Add(_toggleButton);
@@ -141,15 +132,9 @@ namespace WorkMode.UI
             Controls.Add(_notesButton);
             Controls.Add(_deleteButton);
 
-            MouseDown += OnDragMouseDown;
-            MouseMove += OnDragMouseMove;
-            MouseUp += OnDragMouseUp;
-            _titleLabel.MouseDown += OnDragMouseDown;
-            _titleLabel.MouseMove += OnDragMouseMove;
-            _titleLabel.MouseUp += OnDragMouseUp;
-            _timeLabel.MouseDown += OnDragMouseDown;
-            _timeLabel.MouseMove += OnDragMouseMove;
-            _timeLabel.MouseUp += OnDragMouseUp;
+            _reorder = new RowReorderBehavior(this, this, _titleLabel, _timeLabel);
+            _reorder.ReorderRequested += (s, e) => { var h = ReorderRequested; if (h != null) h(this, e); };
+            _reorder.ReorderCompleted += (s, e) => { var h = ReorderCompleted; if (h != null) h(this, e); };
             _toggleButton.Cursor = Cursors.Default;
             _resetButton.Cursor = Cursors.Default;
             _editButton.Cursor = Cursors.Default;
@@ -177,7 +162,7 @@ namespace WorkMode.UI
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
             e.Graphics.Clear(Theme.Background);
 
-            int inset = _dragReady ? 1 : 0;
+            int inset = _reorder.IsReady ? 1 : 0;
             var rect = new Rectangle(inset, inset, Width - 1 - inset * 2, Height - 1 - inset * 2);
             using (var path = RoundedRect(rect, CornerRadius))
             using (var fill = new SolidBrush(Theme.Surface))
@@ -191,7 +176,7 @@ namespace WorkMode.UI
         // Holding the row reveals drag readiness; hover remains a lighter hint.
         private Pen BorderPen()
         {
-            if (_dragReady) return new Pen(Color.FromArgb(180, Theme.BlueHover), 1.5f);
+            if (_reorder.IsReady) return new Pen(Color.FromArgb(180, Theme.BlueHover), 1.5f);
             if (_hover) return new Pen(Color.FromArgb(190, Theme.WorkspaceBorder));
             return new Pen(Theme.WorkspaceBorder);
         }
@@ -202,161 +187,6 @@ namespace WorkMode.UI
             if (_hover == hovering) return;
             _hover = hovering;
             Invalidate();
-        }
-
-        private void OnDragMouseDown(object sender, MouseEventArgs e)
-        {
-            if (e.Button != MouseButtons.Left) return;
-            _dragStart = Cursor.Position;
-            Point rowOrigin = PointToScreen(Point.Empty);
-            _dragPreviewOffset = new Point(_dragStart.X - rowOrigin.X, _dragStart.Y - rowOrigin.Y);
-            _dragPending = true;
-            _dragReady = false;
-            _dragHoldTimer.Start();
-        }
-
-        private void OnDragHoldElapsed(object sender, EventArgs e)
-        {
-            _dragHoldTimer.Stop();
-            if (!_dragPending || (Control.MouseButtons & MouseButtons.Left) == 0)
-            {
-                ResetDragState();
-                return;
-            }
-
-            _dragReady = true;
-            ShowDragPreview();
-            SetDragCursor(true);
-            Invalidate();
-        }
-
-        private void OnDragMouseMove(object sender, MouseEventArgs e)
-        {
-            if (!_dragPending || (Control.MouseButtons & MouseButtons.Left) == 0) return;
-            if (!_dragReady) return;
-
-            PositionDragPreview();
-
-            if (!_dragging)
-            {
-                Size dragSize = SystemInformation.DragSize;
-                var dragBounds = new Rectangle(
-                    _dragStart.X - dragSize.Width / 2,
-                    _dragStart.Y - dragSize.Height / 2,
-                    dragSize.Width,
-                    dragSize.Height);
-                if (dragBounds.Contains(Cursor.Position)) return;
-                _dragging = true;
-            }
-
-            var h = ReorderRequested;
-            if (h != null) h(this, EventArgs.Empty);
-        }
-
-        private void OnDragMouseUp(object sender, MouseEventArgs e)
-        {
-            bool reordered = _dragging;
-            ResetDragState();
-
-            if (!reordered) return;
-            var h = ReorderCompleted;
-            if (h != null) h(this, EventArgs.Empty);
-        }
-
-        private void ResetDragState()
-        {
-            _dragHoldTimer.Stop();
-            if (_dragPreview != null)
-            {
-                _dragPreview.Close();
-                _dragPreview.Dispose();
-                _dragPreview = null;
-            }
-            _dragPending = false;
-            _dragReady = false;
-            _dragging = false;
-            SetDragCursor(false);
-            Invalidate();
-        }
-
-        private void SetDragCursor(bool active)
-        {
-            Cursor cursor = active ? Cursors.SizeAll : Cursors.Default;
-            Cursor = cursor;
-            _titleLabel.Cursor = cursor;
-            _timeLabel.Cursor = cursor;
-        }
-
-        private void ShowDragPreview()
-        {
-            var snapshot = new Bitmap(Width, Height);
-            DrawToBitmap(snapshot, ClientRectangle);
-            _dragPreview = new DragPreviewForm(snapshot);
-            PositionDragPreview();
-            _dragPreview.Show(this);
-        }
-
-        private void PositionDragPreview()
-        {
-            if (_dragPreview == null) return;
-            Point pointer = Cursor.Position;
-            _dragPreview.Location = new Point(
-                pointer.X - _dragPreviewOffset.X,
-                pointer.Y - _dragPreviewOffset.Y);
-        }
-
-        private sealed class DragPreviewForm : Form
-        {
-            private const int WsExTransparent = 0x20;
-            private const int WsExToolWindow = 0x80;
-            private const int WsExNoActivate = 0x08000000;
-            private const int WmNcHitTest = 0x0084;
-            private const int HtTransparent = -1;
-            private readonly Bitmap _snapshot;
-
-            public DragPreviewForm(Bitmap snapshot)
-            {
-                _snapshot = snapshot;
-                FormBorderStyle = FormBorderStyle.None;
-                ShowInTaskbar = false;
-                StartPosition = FormStartPosition.Manual;
-                Size = snapshot.Size;
-                Opacity = 0.3;
-            }
-
-            protected override bool ShowWithoutActivation { get { return true; } }
-
-            protected override CreateParams CreateParams
-            {
-                get
-                {
-                    CreateParams parameters = base.CreateParams;
-                    parameters.ExStyle |= WsExTransparent | WsExToolWindow | WsExNoActivate;
-                    return parameters;
-                }
-            }
-
-            protected override void OnPaint(PaintEventArgs e)
-            {
-                e.Graphics.DrawImageUnscaled(_snapshot, Point.Empty);
-            }
-
-            protected override void WndProc(ref Message message)
-            {
-                if (message.Msg == WmNcHitTest)
-                {
-                    message.Result = new IntPtr(HtTransparent);
-                    return;
-                }
-
-                base.WndProc(ref message);
-            }
-
-            protected override void Dispose(bool disposing)
-            {
-                if (disposing) _snapshot.Dispose();
-                base.Dispose(disposing);
-            }
         }
 
         private static GraphicsPath RoundedRect(Rectangle r, int radius)
@@ -433,7 +263,7 @@ namespace WorkMode.UI
             {
                 if (_notesForm != null) _notesForm.Close();
                 if (_tooltip != null) _tooltip.Dispose();
-                if (_dragHoldTimer != null) _dragHoldTimer.Dispose();
+                if (_reorder != null) _reorder.Dispose();
             }
             base.Dispose(disposing);
         }

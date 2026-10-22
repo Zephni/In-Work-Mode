@@ -15,17 +15,22 @@ namespace WorkMode.UI
         private readonly Button _delete;
         private readonly ToolTip _tooltip;
         private readonly Timer _feedbackTimer;
+        private readonly RowReorderBehavior _reorder;
         private bool _hover;
 
         public event EventHandler RunRequested;
         public event EventHandler EditRequested;
         public event EventHandler DeleteRequested;
+        public event EventHandler ReorderRequested;
+        public event EventHandler ReorderCompleted;
 
+        internal CustomAction Action { get; private set; }
         internal Button RunButton { get { return _run; } }
         internal string StatusText { get { return _status.Text; } }
 
         public CustomActionRow(CustomAction action)
         {
+            Action = action;
             Height = 56;
             Margin = new Padding(0, 0, 0, 8);
             BackColor = Theme.Surface;
@@ -48,17 +53,19 @@ namespace WorkMode.UI
             _edit = MakeButton("Edit " + action.Title, Glyphs.Edit(20, Color.White), Theme.NeutralGray, Theme.NeutralGrayHover);
             _delete = MakeButton("Delete " + action.Title, Glyphs.Trash(20, Color.White), Theme.NeutralGray, Theme.NeutralGrayHover);
             _run.Click += (s, e) => { var handler = RunRequested; if (handler != null) handler(this, e); };
-            _title.Click += (s, e) => { if (_run.Enabled) _run.PerformClick(); };
+            _title.Click += (s, e) => { if (_run.Enabled && !_reorder.SuppressClick) _run.PerformClick(); };
             _edit.Click += (s, e) => { var handler = EditRequested; if (handler != null) handler(this, e); };
             _delete.Click += (s, e) => { var handler = DeleteRequested; if (handler != null) handler(this, e); };
             _tooltip = new ToolTip { InitialDelay = 350, ReshowDelay = 200, ShowAlways = true };
             _tooltip.SetToolTip(_run, "Run");
             _tooltip.SetToolTip(_edit, "Edit");
             _tooltip.SetToolTip(_delete, "Delete");
-            _tooltip.SetToolTip(_title, action.Command);
             _feedbackTimer = new Timer { Interval = 3500 };
             _feedbackTimer.Tick += (s, e) => ResetFeedback(action);
             Controls.AddRange(new Control[] { _title, _status, _run, _edit, _delete });
+            _reorder = new RowReorderBehavior(this, this, _title, _status);
+            _reorder.ReorderRequested += (s, e) => { var h = ReorderRequested; if (h != null) h(this, e); };
+            _reorder.ReorderCompleted += (s, e) => { var h = ReorderCompleted; if (h != null) h(this, e); };
             MouseEnter += OnHoverChanged;
             MouseLeave += OnHoverChanged;
             foreach (Control child in Controls)
@@ -147,13 +154,16 @@ namespace WorkMode.UI
             e.Graphics.Clear(Theme.Background);
             using (var path = new GraphicsPath())
             using (var brush = new SolidBrush(Theme.Surface))
-            using (var pen = new Pen(_hover ? Theme.WorkspaceBorder : Theme.Border))
+            using (var pen = _reorder.IsReady
+                ? new Pen(Color.FromArgb(180, Theme.BlueHover), 1.5f)
+                : new Pen(_hover ? Theme.WorkspaceBorder : Theme.Border))
             {
                 const int diameter = 20;
-                path.AddArc(0, 0, diameter, diameter, 180, 90);
-                path.AddArc(Width - 1 - diameter, 0, diameter, diameter, 270, 90);
-                path.AddArc(Width - 1 - diameter, Height - 1 - diameter, diameter, diameter, 0, 90);
-                path.AddArc(0, Height - 1 - diameter, diameter, diameter, 90, 90);
+                int inset = _reorder.IsReady ? 1 : 0;
+                path.AddArc(inset, inset, diameter, diameter, 180, 90);
+                path.AddArc(Width - 1 - diameter - inset, inset, diameter, diameter, 270, 90);
+                path.AddArc(Width - 1 - diameter - inset, Height - 1 - diameter - inset, diameter, diameter, 0, 90);
+                path.AddArc(inset, Height - 1 - diameter - inset, diameter, diameter, 90, 90);
                 path.CloseFigure();
                 e.Graphics.FillPath(brush, path);
                 e.Graphics.DrawPath(pen, path);
@@ -164,6 +174,7 @@ namespace WorkMode.UI
         {
             if (disposing)
             {
+                _reorder.Dispose();
                 _feedbackTimer.Dispose();
                 _tooltip.Dispose();
                 _run.Image.Dispose();

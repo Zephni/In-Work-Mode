@@ -114,7 +114,13 @@ completed, not that the service or tunnel is ready. Errors from those independen
 commands appear in their own consoles, not the app's error dialog.
 
 Custom actions use the same rounded cards, icon buttons and dashed add card as
-Time Tracking. Both tabs have icons. The add/edit action dialog can be resized
+Time Tracking. Hold and drag a card's title, description or background to reorder
+it, with the same translucent preview as Time Tracking. The new order is saved
+automatically, and the add card stays at the bottom. Reordering is disabled while
+an action is running. Both tabs have vertically centered icons and labels with space
+between them. Hovering over an action title does not show its script; use Edit to
+view it. The Run, Edit and Delete buttons retain their tooltips.
+The add/edit action dialog can be resized
 or maximized; its command field expands with it.
 
 ## Build and test

@@ -40,6 +40,8 @@ internal static class RegressionTests
             TestConfiguration(directory);
             Application.EnableVisualStyles();
             Control.CheckForIllegalCrossThreadCalls = true;
+            TestTabLayoutAndTooltips(directory);
+            TestActionReordering(directory);
             TestInterface(directory);
             Console.WriteLine("Passed " + _assertions + " assertions.");
             return 0;
@@ -454,6 +456,202 @@ internal static class RegressionTests
         Assert(condition(), "Timed out waiting for " + state);
     }
 
+    private static void TestActionReordering(string directory)
+    {
+        string path = Path.Combine(directory, "reorder.ini");
+        var config = new AppConfig(path);
+        var first = new CustomAction { Title = "First", Command = "echo first" };
+        var second = new CustomAction { Title = "Second", Command = "echo second" };
+        var third = new CustomAction { Title = "Third", Command = "echo third" };
+        config.CustomActions.AddRange(new[] { first, second, third });
+        config.Workspaces.Add(new Workspace("Unchanged workspace", 17));
+        config.SaveOrThrow();
+        using (var form = new Form())
+        using (var page = new CustomActionsControl(config) { Dock = DockStyle.Fill })
+        {
+            form.Controls.Add(page);
+            form.Show();
+            Application.DoEvents();
+            var list = Find<FlowLayoutPanel>(page, c => true);
+            var row = Find<CustomActionRow>(page, c => c.Action == first);
+            Control add = Find<AddWorkspaceRow>(page, c => true);
+            RowReorderBehavior.MoveRow(list, row, 1, new Point(0, list.Controls[2].Bottom + 100));
+            Assert(list.Controls[2] == row && list.Controls[3] == add, "Dragging downward keeps add card last");
+            Assert(config.CustomActions[0] == first, "Live dragging does not persist until release");
+            CompleteReorder(row);
+            var loaded = AppConfig.Load(path);
+            Assert(config.CustomActions[0] == second && config.CustomActions[1] == third &&
+                config.CustomActions[2] == first, "Release updates action model order");
+            Assert(loaded.CustomActions[0].Title == "Second" && loaded.CustomActions[2].Command == "echo first",
+                "Reordered actions and scripts survive reload");
+            Assert(loaded.Workspaces.Count == 1 && loaded.Workspaces[0].ElapsedSeconds == 17,
+                "Action reordering preserves workspaces");
+
+            RowReorderBehavior.MoveRow(list, row, 1, new Point(0, list.Controls[1].Top));
+            CompleteReorder(row);
+            Assert(config.CustomActions[1] == first && list.Controls[3] == add, "Can insert in the middle");
+            RowReorderBehavior.MoveRow(list, row, 1, Point.Empty);
+            CompleteReorder(row);
+            Assert(config.CustomActions[0] == first && list.Controls[3] == add, "Can move to the top");
+            RowReorderBehavior.MoveRow(list, row, 1, new Point(0, row.Top + row.Height / 2));
+            CompleteReorder(row);
+            Assert(config.CustomActions[0] == first, "Dragging in place preserves order");
+
+            SynchronizationContext previousContext = SynchronizationContext.Current;
+            using (var context = new WindowsFormsSynchronizationContext())
+            {
+                SynchronizationContext.SetSynchronizationContext(context);
+                try
+                {
+                    first.Command = "ping -n 2 127.0.0.1 >nul";
+                    row.RunButton.PerformClick();
+                    Assert(page.IsRunning && !row.Enabled && !add.Enabled, "Running action disables reordering and adding");
+                    RaiseControlEvent(row, "OnMouseDown", new MouseEventArgs(MouseButtons.Left, 1, 0, 0, 0));
+                    var runningBehavior = (RowReorderBehavior)typeof(CustomActionRow).GetField("_reorder",
+                        System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(row);
+                    Assert(!(bool)typeof(RowReorderBehavior).GetField("_pending",
+                        System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(runningBehavior),
+                        "Disabled action cannot start a drag");
+                    PumpUntil(() => !page.IsRunning, 10000, "reorder test command completion");
+                    Assert(row.Enabled && add.Enabled, "Reordering and adding are restored after execution");
+                }
+                finally
+                {
+                    first.Command = "echo first";
+                    SynchronizationContext.SetSynchronizationContext(previousContext);
+                }
+            }
+
+            File.Delete(path);
+            Directory.CreateDirectory(path);
+            bool errorShown = false;
+            try
+            {
+                using (var closeDialog = new System.Windows.Forms.Timer { Interval = 50 })
+                {
+                    closeDialog.Tick += (s, e) =>
+                    {
+                        Form errorDialog = null;
+                        foreach (Form open in Application.OpenForms)
+                            if (open.Text == "Could not save custom actions") errorDialog = open;
+                        if (errorDialog == null) return;
+                        errorShown = true;
+                        errorDialog.Close();
+                    };
+                    closeDialog.Start();
+                    RowReorderBehavior.MoveRow(list, row, 1, new Point(0, list.Controls[2].Bottom + 100));
+                    CompleteReorder(row);
+                }
+                Assert(errorShown && config.CustomActions[0] == first, "Save failure is reported and restores model order");
+                Assert(((CustomActionRow)list.Controls[0]).Action == first &&
+                    list.Controls[3] == add, "Save failure restores displayed order and add card");
+            }
+            finally
+            {
+                Directory.Delete(path);
+            }
+            form.Close();
+        }
+        using (var row = new CustomActionRow(first))
+        {
+            int runs = 0;
+            row.RunRequested += (s, e) => runs++;
+            Label title = Find<Label>(row, c => c.Text == first.Title);
+            RaiseControlEvent(title, "OnClick", EventArgs.Empty);
+            Assert(runs == 1, "Normal title click still runs an action");
+            var behavior = (RowReorderBehavior)typeof(CustomActionRow).GetField("_reorder",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(row);
+            typeof(RowReorderBehavior).GetProperty("SuppressClick").GetSetMethod(true).Invoke(behavior, new object[] { true });
+            RaiseControlEvent(title, "OnClick", EventArgs.Empty);
+            Assert(runs == 1, "Title click following a drag does not run the action");
+        }
+        using (var list = new FlowLayoutPanel())
+        using (var row = new WorkspaceControl(new Workspace("Only workspace", 0), config))
+        {
+            list.Controls.Add(row);
+            list.Controls.Add(new AddWorkspaceRow());
+            list.Controls.Add(new SimulationToggleRow());
+            RowReorderBehavior.MoveRow(list, row, 2, new Point(0, 1000));
+            Assert(list.Controls[0] == row, "Shared reordering keeps workspace footers pinned with a single row");
+            list.Controls.Add(new WorkspaceControl(new Workspace("Second workspace", 0), config));
+            list.Controls.SetChildIndex(list.Controls[3], 1);
+            RowReorderBehavior.MoveRow(list, row, 2, new Point(0, 1000));
+            Assert(list.Controls[1] == row && list.Controls[2] is AddWorkspaceRow &&
+                list.Controls[3] is SimulationToggleRow, "Workspace reordering preserves both footer positions");
+        }
+    }
+
+    private static void CompleteReorder(CustomActionRow row)
+    {
+        var behavior = (RowReorderBehavior)typeof(CustomActionRow).GetField("_reorder",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(row);
+        typeof(RowReorderBehavior).GetField("_dragging",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).SetValue(behavior, true);
+        RaiseControlEvent(row, "OnMouseUp", new MouseEventArgs(MouseButtons.Left, 1, 0, 0, 0));
+    }
+
+    private static void RaiseControlEvent(Control control, string name, EventArgs args)
+    {
+        typeof(Control).GetMethod(name, System.Reflection.BindingFlags.NonPublic |
+            System.Reflection.BindingFlags.Instance).Invoke(control, new object[] { args });
+    }
+
+    private static void TestTabLayoutAndTooltips(string directory)
+    {
+        var config = new AppConfig(Path.Combine(directory, "tab-layout.ini"));
+        config.CustomActions.Add(new CustomAction { Title = "Quick action", Command = "echo Done" });
+        using (var form = new MainForm(config))
+        {
+            form.Show();
+            Application.DoEvents();
+            Button tracking = Find<Button>(form, b => b.Text == "Time Tracking");
+            Button actions = Find<Button>(form, b => b.Text == "Custom Actions");
+            AssertTabContentLayout(tracking);
+            AssertTabContentLayout(actions);
+            actions.PerformClick();
+            Application.DoEvents();
+            AssertTabContentLayout(tracking);
+            AssertTabContentLayout(actions);
+            CustomActionRow row = Find<CustomActionRow>(form, c => true);
+            var tooltip = (ToolTip)typeof(CustomActionRow).GetField("_tooltip",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(row);
+            Assert(tooltip.GetToolTip(Find<Label>(row, c => c.Text == "Quick action")) == "",
+                "Action title does not expose the command in a tooltip");
+            Assert(tooltip.GetToolTip(row.RunButton) == "Run" &&
+                tooltip.GetToolTip(Find<Button>(row, c => c.AccessibleName == "Edit Quick action")) == "Edit" &&
+                tooltip.GetToolTip(Find<Button>(row, c => c.AccessibleName == "Delete Quick action")) == "Delete",
+                "Action icon buttons retain their tooltips");
+            form.Close();
+        }
+    }
+
+    private static void AssertTabContentLayout(Button tab)
+    {
+        using (var bitmap = new Bitmap(tab.Width, tab.Height))
+        {
+            tab.DrawToBitmap(bitmap, tab.ClientRectangle);
+            Rectangle icon = Rectangle.Empty;
+            Rectangle text = Rectangle.Empty;
+            for (int y = 7; y < bitmap.Height - 7; y++)
+                for (int x = 8; x < bitmap.Width - 8; x++)
+                {
+                    Color pixel = bitmap.GetPixel(x, y);
+                    int foregroundDistance = Math.Abs(pixel.R - tab.ForeColor.R) +
+                        Math.Abs(pixel.G - tab.ForeColor.G) + Math.Abs(pixel.B - tab.ForeColor.B);
+                    if (foregroundDistance > 90) continue;
+                    var point = new Rectangle(x, y, 1, 1);
+                    if (x < 34) icon = icon.IsEmpty ? point : Rectangle.Union(icon, point);
+                    else text = text.IsEmpty ? point : Rectangle.Union(text, point);
+                }
+            Assert(!icon.IsEmpty && !text.IsEmpty, tab.Text + " renders both icon and text");
+            Assert(text.Left - icon.Right >= 6, tab.Text + " has a visible icon-to-text gap");
+            Assert(Math.Abs(icon.Top + icon.Bottom - tab.Height) <= 4 &&
+                Math.Abs(text.Top + text.Bottom - tab.Height) <= 4 &&
+                Math.Abs(icon.Top + icon.Bottom - text.Top - text.Bottom) <= 4,
+                tab.Text + " icon and text are vertically centered");
+        }
+    }
+
     private static void TestInterface(string directory)
     {
         var config = new AppConfig(Path.Combine(directory, "ui.ini"));
@@ -488,6 +686,8 @@ internal static class RegressionTests
                         "Run feedback must be updated on the UI thread");
                     run.PerformClick();
                     Assert(page.IsRunning && !run.Enabled, "Running state disables duplicate execution");
+                    Assert(!row.Enabled && !Find<AddWorkspaceRow>(page, c => true).Enabled,
+                        "Running actions disable drag surfaces and the add card");
                     PumpUntil(() => !page.IsRunning, 10000, "first command completion");
                     Assert(run.Image != null && row.StatusText == "Ran successfully" && run.Enabled, "Success icon and confirmation");
                     Thread.Sleep(500);

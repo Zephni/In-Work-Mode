@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Drawing;
 using System.IO;
@@ -57,6 +58,8 @@ namespace WorkMode.UI
         private Control CreateRow(CustomAction action)
         {
             var row = new CustomActionRow(action);
+            row.ReorderRequested += OnActionReorderRequested;
+            row.ReorderCompleted += OnActionReorderCompleted;
             row.EditRequested += (s, e) => EditAction(action);
             row.DeleteRequested += (s, e) =>
             {
@@ -122,6 +125,31 @@ namespace WorkMode.UI
                 }
             };
             return row;
+        }
+
+        private void OnActionReorderRequested(object sender, EventArgs e)
+        {
+            if (IsRunning) return;
+            RowReorderBehavior.MoveRow(_list, sender as CustomActionRow, 1,
+                _list.PointToClient(Cursor.Position));
+        }
+
+        private void OnActionReorderCompleted(object sender, EventArgs e)
+        {
+            if (IsRunning) return;
+            var previous = new List<CustomAction>(_config.CustomActions);
+            _config.CustomActions.Clear();
+            foreach (Control control in _list.Controls)
+            {
+                var row = control as CustomActionRow;
+                if (row != null) _config.CustomActions.Add(row.Action);
+            }
+            if (!SaveActions())
+            {
+                _config.CustomActions.Clear();
+                _config.CustomActions.AddRange(previous);
+                Rebuild();
+            }
         }
 
         private void SetEditingEnabled(bool enabled)
