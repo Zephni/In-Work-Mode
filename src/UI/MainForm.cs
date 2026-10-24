@@ -24,7 +24,7 @@ namespace WorkMode.UI
         private readonly FlowLayoutPanel _list;
         private readonly Timer _tickTimer;
         private readonly AddWorkspaceRow _addRow;
-        private readonly SimulationToggleRow _simToggleRow;
+        private readonly SimulationToggleButton _simToggleButton;
         private readonly CustomActionsControl _customActions;
         private readonly HashSet<Keys> _heldKeys = new HashSet<Keys>();
         private bool _resizeRowsPending;
@@ -126,6 +126,18 @@ namespace WorkMode.UI
             };
             tabs.Controls.Add(trackingTab);
             tabs.Controls.Add(actionsTab);
+            _simToggleButton = new SimulationToggleButton { Visible = _config.DevMode };
+            _simToggleButton.Click += OnToggleSimulation;
+            var toolbar = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1,
+                BackColor = Theme.Surface, Margin = new Padding(0), Padding = new Padding(0)
+            };
+            toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            toolbar.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            toolbar.Controls.Add(tabs, 0, 0);
+            toolbar.Controls.Add(_simToggleButton, 1, 0);
             var container = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2,
@@ -135,7 +147,7 @@ namespace WorkMode.UI
             container.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
             container.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             tabs.Margin = pages.Margin = new Padding(0);
-            container.Controls.Add(tabs, 0, 0);
+            container.Controls.Add(toolbar, 0, 0);
             container.Controls.Add(pages, 0, 1);
             Controls.Add(container);
             selectTab(true);
@@ -147,13 +159,6 @@ namespace WorkMode.UI
             _addRow = new AddWorkspaceRow();
             _addRow.AddRequested += OnAddWorkspace;
             _list.Controls.Add(_addRow);
-
-            // Developer-only toggle for the activity simulation, pinned below the
-            // add-workspace card. Hidden unless dev mode is enabled.
-            _simToggleRow = new SimulationToggleRow();
-            _simToggleRow.ToggleRequested += OnToggleSimulation;
-            _simToggleRow.Visible = _config.DevMode;
-            _list.Controls.Add(_simToggleRow);
 
             // Fit each row to the list width.
             _list.Resize += (s, e) => QueueResizeRows();
@@ -214,11 +219,11 @@ namespace WorkMode.UI
 
             // Reveal / hide the simulation toggle. Leaving dev mode also stops any
             // running simulation so it can't keep going with no visible control.
-            _simToggleRow.Visible = _config.DevMode;
+            _simToggleButton.Visible = _config.DevMode;
             if (!_config.DevMode && _activity.IsRunning)
             {
                 _activity.Stop();
-                _simToggleRow.Active = false;
+                _simToggleButton.Active = false;
             }
         }
 
@@ -228,7 +233,7 @@ namespace WorkMode.UI
             if (_activity.IsRunning) _activity.Stop();
             else _activity.Start();
 
-            _simToggleRow.Active = _activity.IsRunning;
+            _simToggleButton.Active = _activity.IsRunning;
         }
 
         private void AddRow(Workspace ws)
@@ -247,13 +252,11 @@ namespace WorkMode.UI
             PinFooterRows();
         }
 
-        // Keeps the add-workspace card and the dev-only simulation toggle pinned to
-        // the bottom of the list, in that order.
+        // Keeps the add-workspace card pinned to the bottom of the list.
         private void PinFooterRows()
         {
-            if (_addRow == null || _simToggleRow == null) return;
-            _list.Controls.SetChildIndex(_simToggleRow, _list.Controls.Count - 1);
-            _list.Controls.SetChildIndex(_addRow, _list.Controls.Count - 2);
+            if (_addRow == null) return;
+            _list.Controls.SetChildIndex(_addRow, _list.Controls.Count - 1);
         }
 
         private void OnWorkspaceReorderRequested(object sender, EventArgs e)
@@ -261,7 +264,7 @@ namespace WorkMode.UI
             var draggedRow = sender as WorkspaceControl;
             if (draggedRow == null || draggedRow.Parent != _list) return;
 
-            RowReorderBehavior.MoveRow(_list, draggedRow, 2, _list.PointToClient(Cursor.Position));
+            RowReorderBehavior.MoveRow(_list, draggedRow, 1, _list.PointToClient(Cursor.Position));
             PinFooterRows();
         }
 

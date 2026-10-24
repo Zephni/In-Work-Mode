@@ -43,6 +43,7 @@ internal static class RegressionTests
             TestTabLayoutAndTooltips(directory);
             TestActionReordering(directory);
             TestInterface(directory);
+            TestSimulationToolbar(directory);
             Console.WriteLine("Passed " + _assertions + " assertions.");
             return 0;
         }
@@ -570,14 +571,13 @@ internal static class RegressionTests
         {
             list.Controls.Add(row);
             list.Controls.Add(new AddWorkspaceRow());
-            list.Controls.Add(new SimulationToggleRow());
-            RowReorderBehavior.MoveRow(list, row, 2, new Point(0, 1000));
-            Assert(list.Controls[0] == row, "Shared reordering keeps workspace footers pinned with a single row");
+            RowReorderBehavior.MoveRow(list, row, 1, new Point(0, 1000));
+            Assert(list.Controls[0] == row, "Shared reordering keeps workspace footer pinned with a single row");
             list.Controls.Add(new WorkspaceControl(new Workspace("Second workspace", 0), config));
-            list.Controls.SetChildIndex(list.Controls[3], 1);
-            RowReorderBehavior.MoveRow(list, row, 2, new Point(0, 1000));
-            Assert(list.Controls[1] == row && list.Controls[2] is AddWorkspaceRow &&
-                list.Controls[3] is SimulationToggleRow, "Workspace reordering preserves both footer positions");
+            list.Controls.SetChildIndex(list.Controls[2], 1);
+            RowReorderBehavior.MoveRow(list, row, 1, new Point(0, 1000));
+            Assert(list.Controls[1] == row && list.Controls[2] is AddWorkspaceRow,
+                "Workspace reordering preserves the add footer position");
         }
     }
 
@@ -621,6 +621,52 @@ internal static class RegressionTests
                 tooltip.GetToolTip(Find<Button>(row, c => c.AccessibleName == "Edit Quick action")) == "Edit" &&
                 tooltip.GetToolTip(Find<Button>(row, c => c.AccessibleName == "Delete Quick action")) == "Delete",
                 "Action icon buttons retain their tooltips");
+            form.Close();
+        }
+    }
+
+    private static void TestSimulationToolbar(string directory)
+    {
+        var config = new AppConfig(Path.Combine(directory, "simulation-toolbar.ini")) { DevMode = true };
+        config.Workspaces.Add(new Workspace("Toolbar workspace", 0));
+        using (var form = new MainForm(config))
+        {
+            form.Show();
+            Application.DoEvents();
+            var toggle = Find<SimulationToggleButton>(form, c => true);
+            var tooltip = (ToolTip)typeof(SimulationToggleButton).GetField("_tooltip",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(toggle);
+            var activity = (WorkMode.Activity.ActivitySimulator)typeof(MainForm).GetField("_activity",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(form);
+            Assert(toggle.Visible && toggle.Text == "" && toggle.Image != null &&
+                toggle.Size == new Size(34, 34) && toggle.TabStop, "Simulation is a compact keyboard-accessible icon button");
+            Assert(!toggle.Active && !activity.IsRunning && tooltip.GetToolTip(toggle).Contains("Off"),
+                "Simulation starts off with an explanatory tooltip");
+            var list = Find<WorkspaceControl>(form, c => true).Parent;
+            Assert(list.Controls.Count == 2 && list.Controls[1] is AddWorkspaceRow,
+                "Workspace list has no simulation footer");
+            toggle.PerformClick();
+            Assert(toggle.Active && activity.IsRunning && toggle.BackColor == Theme.Accent &&
+                tooltip.GetToolTip(toggle).Contains("turn off"), "Toolbar button starts simulation and updates its state");
+            Find<Button>(form, b => b.Text == "Custom Actions").PerformClick();
+            Application.DoEvents();
+            Assert(toggle.Visible && toggle.Active && activity.IsRunning, "Simulation remains available across tabs");
+            form.Size = form.MinimumSize;
+            Application.DoEvents();
+            Button actions = Find<Button>(form, b => b.Text == "Custom Actions");
+            Rectangle toggleBounds = form.RectangleToClient(toggle.RectangleToScreen(toggle.ClientRectangle));
+            Rectangle actionsBounds = form.RectangleToClient(actions.RectangleToScreen(actions.ClientRectangle));
+            Assert(toggleBounds.Right <= form.ClientSize.Width && toggleBounds.Left >= actionsBounds.Right &&
+                toggleBounds.Top == actionsBounds.Top && toggleBounds.Height == actionsBounds.Height,
+                "Simulation icon fits beside the tabs at the minimum window size");
+            toggle.PerformClick();
+            Assert(!toggle.Active && !activity.IsRunning && tooltip.GetToolTip(toggle).Contains("turn on"),
+                "Toolbar button stops simulation and restores its off tooltip");
+            toggle.PerformClick();
+            foreach (Keys key in new[] { Keys.Z, Keys.E, Keys.P, Keys.H })
+                RaiseControlEvent(form, "OnKeyDown", new KeyEventArgs(key));
+            Assert(!config.DevMode && !toggle.Visible && !toggle.Active && !activity.IsRunning,
+                "Leaving developer mode hides the toolbar icon and stops simulation");
             form.Close();
         }
     }
